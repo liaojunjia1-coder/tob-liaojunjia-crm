@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+work/
+outputs/
+.env
+.env.local
+.vercel/
+npm-debug.log*

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="销售 CRM">
+  <rect width="512" height="512" rx="96" fill="#17745a" />
+  <circle cx="364" cy="148" r="48" fill="#f7d772" />
+  <path
+    d="M116 342c62-22 102-66 122-130 8-26 43-30 58-7 19 29 45 47 78 54"
+    fill="none"
+    stroke="#ffffff"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="38"
+  />
+  <path
+    d="M126 388h260"
+    fill="none"
+    stroke="#d7f3e5"
+    stroke-linecap="round"
+    stroke-width="34"
+  />
+  <text
+    x="256"
+    y="190"
+    fill="#ffffff"
+    font-family="Microsoft YaHei, PingFang SC, Arial, sans-serif"
+    font-size="108"
+    font-weight="800"
+    text-anchor="middle"
+  >销</text>
+</svg>
