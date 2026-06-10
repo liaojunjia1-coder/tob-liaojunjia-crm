@@ -344,7 +344,9 @@ function App() {
         }
 
         const saved = rememberedCredentials();
-        if (saved?.remember && saved.email && saved.password) {
+        if (saved?.email?.endsWith(".local")) {
+          window.localStorage.removeItem(REMEMBER_KEY);
+        } else if (saved?.remember && saved.email && saved.password) {
           try {
             const payload = await loginRequest(saved.email, saved.password);
             acceptLogin(payload, payload.token);
@@ -353,6 +355,9 @@ function App() {
             setAuthError("自动登录失败，请手动确认密码。");
           }
         }
+        window.localStorage.removeItem(TOKEN_KEY);
+        window.localStorage.removeItem(USER_KEY);
+        setUser(null);
         setAuthReady(true);
         return;
       }
