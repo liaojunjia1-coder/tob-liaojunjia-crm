@@ -14,17 +14,56 @@ const supabase = CLOUD_MODE
     })
   : null;
 
+const AUTH_EMAIL_DOMAIN = "users.tobcrm.app";
+
+function normalizeAccount(account) {
+  return String(account || "").trim().replace(/\s+/g, " ");
+}
+
+function accountToAuthEmail(account) {
+  const cleanAccount = normalizeAccount(account);
+  if (cleanAccount.includes("@")) return cleanAccount.toLowerCase();
+
+  const bytes = new TextEncoder().encode(cleanAccount.toLowerCase());
+  const encoded = Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  return `u-${encoded}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function displayAccount(authUser) {
+  const account = normalizeAccount(authUser.user_metadata?.account);
+  if (account) return account;
+
+  const email = authUser.email || "";
+  if (email.endsWith(`@${AUTH_EMAIL_DOMAIN}`)) return "未命名账号";
+  return email;
+}
+
 function message(error, fallback) {
   if (!error) return fallback;
-  if (error.message?.includes("Invalid login credentials")) return "账号或密码不正确。";
-  if (error.message?.includes("Email not confirmed")) return "邮箱还没有确认，请先完成邮箱确认。";
-  return error.message || fallback;
+  const text = String(error.message || error).toLowerCase();
+  if (text.includes("invalid login credentials")) return "账号或密码不正确，请检查后再试。";
+  if (text.includes("email not confirmed")) return "账号已创建，但云端还要求邮箱确认。请先关闭邮箱确认后再登录。";
+  if (text.includes("unable to validate email address")) return "账号格式暂时不支持，请换一个手机号、微信号或简单账号。";
+  if (text.includes("already registered") || text.includes("already exists") || text.includes("user already")) {
+    return "这个账号已经注册过，请直接登录。";
+  }
+  if (text.includes("password") && (text.includes("six") || text.includes("6") || text.includes("minimum") || text.includes("least"))) {
+    return "密码至少需要 6 位。";
+  }
+  if (text.includes("rate limit") || text.includes("too many")) return "尝试太频繁了，请稍等一会儿再试。";
+  if (text.includes("failed to fetch") || text.includes("network")) return "网络连接失败，请检查网络后重试。";
+  if (text.includes("database")) return fallback || "云数据库暂时没有成功保存，请稍后再试。";
+  return fallback || "操作失败，请稍后再试。";
 }
 
 function publicUser(authUser, row) {
+  const account = displayAccount(authUser);
   return {
     id: authUser.id,
-    email: authUser.email,
+    email: account,
+    account,
     name: row?.name || authUser.user_metadata?.name || "tob廖俊嘉",
     title: row?.title || "ToB 销售",
     phone: row?.phone || "",
@@ -83,8 +122,15 @@ export async function restoreCloudSession(defaultData) {
 }
 
 export async function cloudLogin(email, password, defaultData) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(message(error, "登录失败。"));
+  const account = normalizeAccount(email);
+  if (!account) throw new Error("请先填写账号。");
+  if (!password) throw new Error("请先填写密码。");
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: accountToAuthEmail(account),
+    password,
+  });
+  if (error) throw new Error(message(error, "登录失败，请稍后再试。"));
 
   const workspace = await ensureWorkspace(data.user, defaultData);
   return {
@@ -94,17 +140,24 @@ export async function cloudLogin(email, password, defaultData) {
 }
 
 export async function cloudRegister(authForm, defaultData) {
+  const account = normalizeAccount(authForm.email);
+  if (!account) throw new Error("请先填写账号。");
+  if (!authForm.password || authForm.password.length < 6) throw new Error("密码至少需要 6 位。");
+
   const { data, error } = await supabase.auth.signUp({
-    email: authForm.email,
+    email: accountToAuthEmail(account),
     password: authForm.password,
     options: {
-      data: { name: authForm.name || "tob廖俊嘉" },
+      data: {
+        account,
+        name: authForm.name || "tob廖俊嘉",
+      },
     },
   });
 
-  if (error) throw new Error(message(error, "创建账号失败。"));
+  if (error) throw new Error(message(error, "创建账号失败，请稍后再试。"));
   if (!data.session?.user) {
-    throw new Error("账号已创建，请先完成邮箱确认后再登录。");
+    throw new Error("账号已创建，但云端还要求邮箱确认。请先关闭邮箱确认后再登录。");
   }
 
   const workspace = await ensureWorkspace(data.session.user, defaultData);

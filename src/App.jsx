@@ -344,9 +344,7 @@ function App() {
         }
 
         const saved = rememberedCredentials();
-        if (saved?.email?.endsWith(".local")) {
-          window.localStorage.removeItem(REMEMBER_KEY);
-        } else if (saved?.remember && saved.email && saved.password) {
+        if (saved?.remember && saved.email && saved.password) {
           try {
             const payload = await loginRequest(saved.email, saved.password);
             acceptLogin(payload, payload.token);
@@ -1422,10 +1420,11 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
             </label>
           )}
           <label>
-            账号
+            账号 / 手机号 / 微信号
             <input
               autoComplete="username"
               onChange={(event) => onChange({ ...authForm, email: event.target.value })}
+              placeholder="例如 13800138000 或 liaojunjia"
               required
               value={authForm.email}
             />
@@ -1436,6 +1435,7 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
               autoComplete={rememberLogin ? "current-password" : "off"}
               minLength="6"
               onChange={(event) => onChange({ ...authForm, password: event.target.value })}
+              placeholder="至少 6 位"
               required
               type="password"
               value={authForm.password}
