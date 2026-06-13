@@ -1,18 +1,22 @@
-import { createClient } from "@supabase/supabase-js";
-
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const CLOUD_MODE = Boolean(supabaseUrl && supabaseAnonKey);
 
-const supabase = CLOUD_MODE
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+let supabaseClientPromise = null;
+
+async function getSupabase() {
+  if (!CLOUD_MODE) return null;
+  supabaseClientPromise ||= import("@supabase/supabase-js").then(({ createClient }) =>
+    createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
       },
-    })
-  : null;
+    }),
+  );
+  return supabaseClientPromise;
+}
 
 const AUTH_EMAIL_DOMAIN = "users.tobcrm.app";
 
@@ -71,6 +75,7 @@ function publicUser(authUser, row) {
 }
 
 async function ensureWorkspace(authUser, defaultData) {
+  const supabase = await getSupabase();
   const { data: existing, error: selectError } = await supabase
     .from("crm_workspaces")
     .select("name,title,phone,data")
@@ -110,6 +115,7 @@ async function ensureWorkspace(authUser, defaultData) {
 
 export async function restoreCloudSession(defaultData) {
   if (!CLOUD_MODE) return null;
+  const supabase = await getSupabase();
   const { data, error } = await supabase.auth.getSession();
   if (error) throw new Error(message(error, "恢复登录失败。"));
   if (!data.session?.user) return null;
@@ -122,6 +128,7 @@ export async function restoreCloudSession(defaultData) {
 }
 
 export async function cloudLogin(email, password, defaultData) {
+  const supabase = await getSupabase();
   const account = normalizeAccount(email);
   if (!account) throw new Error("请先填写账号。");
   if (!password) throw new Error("请先填写密码。");
@@ -140,6 +147,7 @@ export async function cloudLogin(email, password, defaultData) {
 }
 
 export async function cloudRegister(authForm, defaultData) {
+  const supabase = await getSupabase();
   const account = normalizeAccount(authForm.email);
   if (!account) throw new Error("请先填写账号。");
   if (!authForm.password || authForm.password.length < 6) throw new Error("密码至少需要 6 位。");
@@ -168,6 +176,7 @@ export async function cloudRegister(authForm, defaultData) {
 }
 
 export async function saveCloudData(nextData) {
+  const supabase = await getSupabase();
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
   if (!user) throw new Error("请先登录。");
@@ -181,6 +190,7 @@ export async function saveCloudData(nextData) {
 }
 
 export async function saveCloudProfile(profileForm) {
+  const supabase = await getSupabase();
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
   if (!user) throw new Error("请先登录。");
@@ -204,11 +214,13 @@ export async function saveCloudProfile(profileForm) {
 }
 
 export async function changeCloudPassword(nextPassword) {
+  const supabase = await getSupabase();
   const { error } = await supabase.auth.updateUser({ password: nextPassword });
   if (error) throw new Error(message(error, "修改密码失败。"));
 }
 
 export async function cloudLogout() {
   if (!CLOUD_MODE) return;
+  const supabase = await getSupabase();
   await supabase.auth.signOut();
 }

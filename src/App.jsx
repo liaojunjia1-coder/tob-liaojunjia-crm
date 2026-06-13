@@ -41,6 +41,7 @@ const STORAGE_KEY = "apprentice-sales-crm-v1";
 const TOKEN_KEY = "sales-crm-token-v2";
 const USER_KEY = "sales-crm-user-v2";
 const REMEMBER_KEY = "sales-crm-remember-v1";
+const STATIC_LOCAL_MODE = import.meta.env.VITE_STATIC_LOCAL_MODE === "true";
 
 const STAGES = [
   { id: "新线索", probability: 10 },
@@ -217,6 +218,25 @@ function rememberedCredentials() {
   }
 }
 
+function staticAuthPayload(account, password, name = "tob廖俊嘉") {
+  const cleanAccount = String(account || "").trim();
+  if (!cleanAccount) throw new Error("请先填写账号。");
+  if (!password || password.length < 6) throw new Error("密码至少需要 6 位。");
+
+  return {
+    token: `static-${cleanAccount}-${Date.now()}`,
+    user: {
+      id: `static-${cleanAccount.toLowerCase()}`,
+      email: cleanAccount,
+      account: cleanAccount,
+      name: name || "tob廖俊嘉",
+      title: "ToB 销售",
+      phone: "",
+    },
+    data: loadLocalData(),
+  };
+}
+
 function money(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return "¥0";
@@ -261,7 +281,7 @@ function App() {
   const [rememberLogin, setRememberLogin] = useState(Boolean(remembered?.remember));
   const [authForm, setAuthForm] = useState({
     name: "tob廖俊嘉",
-    email: remembered?.email || (CLOUD_MODE ? "" : "liaojunjia@crm.local"),
+    email: remembered?.email || (CLOUD_MODE || STATIC_LOCAL_MODE ? "" : "liaojunjia@crm.local"),
     password: remembered?.password || (CLOUD_MODE ? "" : "12345678"),
   });
   const [profileForm, setProfileForm] = useState({ name: "tob廖俊嘉", title: "ToB 销售", phone: "" });
@@ -331,6 +351,33 @@ function App() {
 
   useEffect(() => {
     async function restoreSession() {
+      if (STATIC_LOCAL_MODE) {
+        const token = window.localStorage.getItem(TOKEN_KEY);
+        const savedUser = window.localStorage.getItem(USER_KEY);
+        if (token && savedUser) {
+          try {
+            acceptLogin({ user: JSON.parse(savedUser), data: loadLocalData() }, token);
+            return;
+          } catch {
+            window.localStorage.removeItem(TOKEN_KEY);
+            window.localStorage.removeItem(USER_KEY);
+          }
+        }
+
+        const saved = rememberedCredentials();
+        if (saved?.remember && saved.email && saved.password) {
+          try {
+            const payload = staticAuthPayload(saved.email, saved.password);
+            acceptLogin(payload, payload.token);
+            return;
+          } catch {
+            setAuthError("自动登录失败，请手动确认密码。");
+          }
+        }
+        setAuthReady(true);
+        return;
+      }
+
       if (CLOUD_MODE) {
         try {
           const payload = await restoreCloudSession(defaultData);
@@ -402,6 +449,7 @@ function App() {
   }, [data.customers, data.settings.defaultTaskPriority, selectedCustomerId]);
 
   async function loginRequest(email, password) {
+    if (STATIC_LOCAL_MODE) return staticAuthPayload(email, password, authForm.name);
     if (CLOUD_MODE) return cloudLogin(email, password, defaultData);
     return api("/api/auth/login", {
       method: "POST",
@@ -422,11 +470,15 @@ function App() {
     });
     setData(nextData);
     setSelectedCustomerId(nextData.customers[0]?.id || "");
-    setSyncStatus("云端已同步");
+    setSyncStatus(STATIC_LOCAL_MODE ? "本机已保存" : "云端已同步");
     setAuthReady(true);
   }
 
   async function saveRemote(nextData) {
+    if (STATIC_LOCAL_MODE) {
+      setSyncStatus("本机已保存");
+      return;
+    }
     if (!CLOUD_MODE && !window.localStorage.getItem(TOKEN_KEY)) return;
     setSyncStatus("同步中");
     try {
@@ -464,9 +516,11 @@ function App() {
       const payload =
         authMode === "login"
           ? await loginRequest(authForm.email, authForm.password)
-          : CLOUD_MODE
-            ? await cloudRegister(authForm, defaultData)
-            : await api("/api/auth/register", { method: "POST", body: JSON.stringify(authForm) });
+          : STATIC_LOCAL_MODE
+            ? staticAuthPayload(authForm.email, authForm.password, authForm.name)
+            : CLOUD_MODE
+              ? await cloudRegister(authForm, defaultData)
+              : await api("/api/auth/register", { method: "POST", body: JSON.stringify(authForm) });
       if (rememberLogin) {
         window.localStorage.setItem(
           REMEMBER_KEY,
@@ -482,7 +536,9 @@ function App() {
   }
 
   async function logout() {
-    if (CLOUD_MODE) {
+    if (STATIC_LOCAL_MODE) {
+      // 静态镜像只清理本机登录态，不访问任何云服务。
+    } else if (CLOUD_MODE) {
       await cloudLogout().catch(() => {});
     } else {
       await api("/api/auth/logout", { method: "POST" }).catch(() => {});
@@ -496,9 +552,11 @@ function App() {
 
   async function saveProfile(event) {
     event.preventDefault();
-    const nextUser = CLOUD_MODE
-      ? await saveCloudProfile(profileForm)
-      : (
+    const nextUser = STATIC_LOCAL_MODE
+      ? { ...user, ...profileForm }
+      : CLOUD_MODE
+        ? await saveCloudProfile(profileForm)
+        : (
           await api("/api/me", {
             method: "PATCH",
             body: JSON.stringify(profileForm),
@@ -511,7 +569,9 @@ function App() {
 
   async function changePassword(event) {
     event.preventDefault();
-    if (CLOUD_MODE) {
+    if (STATIC_LOCAL_MODE) {
+      // 静态镜像的密码只用于本机快速进入，无需调用服务器。
+    } else if (CLOUD_MODE) {
       await changeCloudPassword(passwordForm.nextPassword);
     } else {
       await api("/api/auth/change-password", {
@@ -673,15 +733,17 @@ function App() {
     setAiInsight(null);
     try {
       const customer = data.customers.find((item) => item.id === customerId);
-      const payload = CLOUD_MODE
-        ? await api("/api/ai/customer-insight", {
+      const payload = STATIC_LOCAL_MODE
+        ? { insight: buildCustomerInsight(customer, data) }
+        : CLOUD_MODE
+          ? await api("/api/ai/customer-insight", {
             method: "POST",
             body: JSON.stringify({ customer, data }),
           }).catch(() => ({ insight: buildCustomerInsight(customer, data) }))
-        : await api("/api/ai/customer-insight", {
-            method: "POST",
-            body: JSON.stringify({ customerId }),
-          });
+          : await api("/api/ai/customer-insight", {
+              method: "POST",
+              body: JSON.stringify({ customerId }),
+            });
       setAiInsight(payload.insight);
     } catch (error) {
       setAiInsight({ error: error.message });
@@ -694,15 +756,17 @@ function App() {
     if (!activityForm.content.trim()) return;
     setFollowupAi(null);
     const customer = data.customers.find((item) => item.id === activityForm.customerId);
-    const payload = CLOUD_MODE
-      ? await api("/api/ai/followup-suggest", {
+    const payload = STATIC_LOCAL_MODE
+      ? { suggestion: buildFollowupSuggestion(customer, activityForm.content) }
+      : CLOUD_MODE
+        ? await api("/api/ai/followup-suggest", {
           method: "POST",
           body: JSON.stringify({ customer, content: activityForm.content }),
         }).catch(() => ({ suggestion: buildFollowupSuggestion(customer, activityForm.content) }))
-      : await api("/api/ai/followup-suggest", {
-          method: "POST",
-          body: JSON.stringify({ customerId: activityForm.customerId, content: activityForm.content }),
-        });
+        : await api("/api/ai/followup-suggest", {
+            method: "POST",
+            body: JSON.stringify({ customerId: activityForm.customerId, content: activityForm.content }),
+          });
     setFollowupAi(payload.suggestion);
   }
 
