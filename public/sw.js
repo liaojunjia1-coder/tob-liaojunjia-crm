@@ -1,4 +1,4 @@
-const CACHE_NAME = "sales-crm-app-v6";
+const CACHE_NAME = "sales-crm-app-v7";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
