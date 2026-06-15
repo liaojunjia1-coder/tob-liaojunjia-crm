@@ -6,6 +6,8 @@
 
 为了让 iPhone Safari、微信和国内网络都能直接打开，推荐先发布到 EdgeOne Pages。
 
+发布时请选择“导入 Git 仓库”，不要用一次性上传。这样以后改 GitHub 里的代码，EdgeOne Pages 会跟着重新部署，公网网址保持不变。
+
 EdgeOne Pages 配置：
 
 ```bash
