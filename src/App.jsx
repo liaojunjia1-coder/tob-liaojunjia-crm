@@ -91,6 +91,7 @@ const VIEWS = [
   { id: "leads", label: "线索池", icon: Target },
   { id: "followups", label: "跟进", icon: MessageSquare },
   { id: "tasks", label: "待办", icon: Bell },
+  { id: "review", label: "复盘", icon: ClipboardList },
   { id: "contracts", label: "合同回款", icon: HandCoins },
   { id: "playbook", label: "销售工具", icon: BookOpen },
 ];
@@ -581,6 +582,7 @@ function App() {
   const [data, setData] = useState(loadLocalData);
   const [syncStatus, setSyncStatus] = useState("本机缓存");
   const [backupStatus, setBackupStatus] = useState("");
+  const [reportCopied, setReportCopied] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(
     () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true,
@@ -1329,14 +1331,28 @@ function App() {
 
   function toggleTask(taskId) {
     const targetTask = data.tasks.find((task) => task.id === taskId);
+    const nextDone = !targetTask?.done;
     commit({
       ...withLog(data, "待办", `${targetTask?.done ? "恢复" : "完成"}待办：${targetTask?.title || ""}`),
-      tasks: data.tasks.map((task) => (task.id === taskId ? { ...task, done: !task.done } : task)),
+      tasks: data.tasks.map((task) =>
+        task.id === taskId ? { ...task, done: nextDone, completedAt: nextDone ? new Date().toISOString() : "" } : task,
+      ),
     });
   }
 
   function deleteTask(taskId) {
     commit({ ...withLog(data, "待办", "删除待办"), tasks: data.tasks.filter((task) => task.id !== taskId) });
+  }
+
+  async function copyReport(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setReportCopied(true);
+      setSyncStatus("日报已复制");
+      window.setTimeout(() => setReportCopied(false), 1800);
+    } catch {
+      setSyncStatus("复制失败，请手动选择日报文本");
+    }
   }
 
   function createLeadFollowTask(customerId) {
@@ -1616,6 +1632,23 @@ function App() {
             taskForm={taskForm}
             todoFilter={todoFilter}
             visibleTasks={visibleTasks}
+          />
+        )}
+
+        {activeView === "review" && (
+          <ReviewView
+            copied={reportCopied}
+            data={data}
+            metrics={metrics}
+            onCopy={copyReport}
+            onCreateTask={createLeadFollowTask}
+            onGeneratePlan={generateDailyPlan}
+            onPickCustomer={(id) => {
+              setSelectedCustomerId(id);
+              go("customers");
+            }}
+            onToggleTask={toggleTask}
+            onViewTasks={() => go("tasks")}
           />
         )}
 
@@ -2791,6 +2824,119 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
   );
 }
 
+function ReviewView({
+  copied,
+  data,
+  metrics,
+  onCopy,
+  onCreateTask,
+  onGeneratePlan,
+  onPickCustomer,
+  onToggleTask,
+  onViewTasks,
+}) {
+  const review = salesReview(data, metrics);
+
+  return (
+    <section className="view">
+      <div className="metrics-grid">
+        <Metric title="今日跟进" value={review.todayActivities.length} detail={`${review.todayCustomers.length} 个客户有动作`} />
+        <Metric title="今日完成" value={review.doneToday.length} detail={`${review.openToday.length} 个今日未完成`} />
+        <Metric title="高风险客户" value={review.riskCustomers.length} detail={`${review.watchCustomers.length} 个需动作`} />
+        <Metric title="预计回款" value={money(metrics.receivable)} detail="未回款金额" />
+      </div>
+
+      <section className="surface report-hero">
+        <div>
+          <span className="eyebrow">日报复盘</span>
+          <h3>把今天的销售动作整理成可复制日报</h3>
+          <p>自动汇总跟进、完成待办、风险客户和明日优先动作，减少手工写日报的时间。</p>
+        </div>
+        <div className="report-actions">
+          <button className="primary-button" onClick={() => onCopy(review.reportText)} type="button">
+            <ClipboardList size={18} />
+            {copied ? "已复制" : "复制日报"}
+          </button>
+          <button className="secondary-button" onClick={onGeneratePlan} type="button">
+            <Bell size={17} />
+            生成今日计划
+          </button>
+        </div>
+      </section>
+
+      <div className="content-grid review-grid">
+        <section className="surface">
+          <SectionHeader title="日报内容" icon={ClipboardList} />
+          <pre className="report-text">{review.reportText}</pre>
+        </section>
+
+        <section className="surface">
+          <SectionHeader title="风险闭环" action="查看待办" onClick={onViewTasks} />
+          <div className="risk-list">
+            {review.priorityCustomers.map(({ customer, risk }) => (
+              <article className={`risk-item ${risk.level}`} key={customer.id}>
+                <div>
+                  <span>{risk.label}</span>
+                  <strong>{customer.company}</strong>
+                  <small>{risk.reason}</small>
+                </div>
+                <div className="risk-actions">
+                  <button className="ghost-button" onClick={() => onPickCustomer(customer.id)} type="button">
+                    <ArrowRight size={15} />
+                    客户
+                  </button>
+                  <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
+                    <Bell size={15} />
+                    待办
+                  </button>
+                </div>
+              </article>
+            ))}
+            {review.priorityCustomers.length === 0 && <EmptyState text="暂无需要处理的风险客户" />}
+          </div>
+        </section>
+      </div>
+
+      <div className="content-grid review-grid">
+        <section className="surface">
+          <SectionHeader title="今日完成" icon={Check} />
+          <div className="review-list">
+            {review.doneToday.map((task) => (
+              <article className="review-row done" key={task.id}>
+                <Check size={16} />
+                <div>
+                  <strong>{task.title}</strong>
+                  <small>{customerName(data.customers, task.customerId)}</small>
+                </div>
+              </article>
+            ))}
+            {review.doneToday.length === 0 && <EmptyState text="今天还没有完成待办" />}
+          </div>
+        </section>
+
+        <section className="surface">
+          <SectionHeader title="今天未闭环" icon={Bell} />
+          <div className="review-list">
+            {review.openToday.map((task) => (
+              <article className={`review-row task-priority-${task.priority}`} key={task.id}>
+                <Circle size={16} />
+                <div>
+                  <strong>{task.title}</strong>
+                  <small>{task.priority}优先级 · {customerName(data.customers, task.customerId)}</small>
+                </div>
+                <button className="ghost-button" onClick={() => onToggleTask(task.id)} type="button">
+                  完成
+                </button>
+              </article>
+            ))}
+            {review.openToday.length === 0 && <EmptyState text="今日待办已清空" />}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function SettingsView({
   backupStatus,
   data,
@@ -3418,6 +3564,7 @@ function viewTitle(view) {
     leads: "线索池",
     followups: "跟进记录",
     tasks: "待办提醒",
+    review: "销售复盘",
     contracts: "合同回款",
     playbook: "销售工具",
     settings: "设置与个人中心",
@@ -3432,6 +3579,7 @@ function viewSubtitle(view) {
     leads: "检查来源质量、重复客户和待激活机会。",
     followups: "每次沟通都留下结论和下一步动作。",
     tasks: "把报价、复盘、二次沟通变成可执行提醒。",
+    review: "自动生成日报，检查今天动作是否闭环。",
     contracts: "记录合同金额、回款节点和逾期风险。",
     playbook: "用录音转写做诊断，结合 SPIN 和 Sales Skill 提升每次沟通质量。",
     settings: "账号、密码、提醒和数据偏好都在这里。",
@@ -3450,6 +3598,75 @@ function riskRank(level) {
   return { risk: 0, watch: 1, good: 2 }[level] ?? 3;
 }
 
+function dateStartsToday(value, today = todayInputValue()) {
+  return String(value || "").startsWith(today);
+}
+
+function daysSince(date) {
+  if (!date) return null;
+  const today = new Date(`${todayInputValue()}T00:00:00`);
+  const target = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  return Math.floor((today.getTime() - target.getTime()) / 86400000);
+}
+
+function salesReview(data, metrics) {
+  const today = todayInputValue();
+  const todayActivities = data.activities.filter(
+    (activity) => activity.date === today || dateStartsToday(activity.createdAt, today),
+  );
+  const todayCustomers = [...new Set(todayActivities.map((activity) => activity.customerId))];
+  const doneToday = data.tasks.filter(
+    (task) => task.done && (dateStartsToday(task.completedAt, today) || (!task.completedAt && task.dueDate === today)),
+  );
+  const openToday = data.tasks
+    .filter((task) => !task.done && task.dueDate && task.dueDate <= today)
+    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || String(a.dueDate).localeCompare(String(b.dueDate)));
+  const scoredCustomers = data.customers
+    .map((customer) => ({ customer, risk: customerRisk(customer, data.activities, data.tasks) }))
+    .sort(
+      (a, b) =>
+        riskRank(a.risk.level) - riskRank(b.risk.level) ||
+        customerPriorityRank(a.customer.priority) - customerPriorityRank(b.customer.priority) ||
+        Number(b.customer.amount || 0) - Number(a.customer.amount || 0),
+    );
+  const riskCustomers = scoredCustomers.filter((item) => item.risk.level === "risk");
+  const watchCustomers = scoredCustomers.filter((item) => item.risk.level === "watch");
+  const priorityCustomers = [...riskCustomers, ...watchCustomers].slice(0, 6);
+  const nextActions = openToday.slice(0, 5);
+
+  const reportText = [
+    `销售日报 ${today}`,
+    "",
+    `1. 今日跟进：${todayActivities.length} 条，覆盖 ${todayCustomers.length} 个客户。`,
+    todayActivities.length
+      ? todayActivities
+          .slice(0, 5)
+          .map((activity) => `- ${customerName(data.customers, activity.customerId)}：${activity.content}`)
+          .join("\n")
+      : "- 今天还没有记录跟进。",
+    "",
+    `2. 今日完成：${doneToday.length} 个待办。`,
+    doneToday.length
+      ? doneToday.slice(0, 5).map((task) => `- ${task.title}（${customerName(data.customers, task.customerId)}）`).join("\n")
+      : "- 暂无已完成待办。",
+    "",
+    `3. 风险客户：${riskCustomers.length} 个高风险，${watchCustomers.length} 个需动作。`,
+    priorityCustomers.length
+      ? priorityCustomers.map(({ customer, risk }) => `- ${customer.company}：${risk.reason}`).join("\n")
+      : "- 暂无明显风险。",
+    "",
+    `4. 明日/下一步优先动作：${nextActions.length} 个。`,
+    nextActions.length
+      ? nextActions.map((task) => `- ${task.title}（${task.priority}，${customerName(data.customers, task.customerId)}）`).join("\n")
+      : "- 今日待办已闭环，明天优先补充新线索或复盘重点客户。",
+    "",
+    `5. 管道：总金额 ${money(metrics.totalAmount)}，加权预测 ${money(metrics.forecast)}，待回款 ${money(metrics.receivable)}。`,
+  ].join("\n");
+
+  return { todayActivities, todayCustomers, doneToday, openToday, riskCustomers, watchCustomers, priorityCustomers, reportText };
+}
+
 function customerRisk(customer, activities, tasks) {
   const today = todayInputValue();
   const customerActivities = activities
@@ -3458,13 +3675,20 @@ function customerRisk(customer, activities, tasks) {
   const latestActivity = customerActivities[0];
   const openTasks = tasks.filter((task) => task.customerId === customer.id && !task.done);
   const overdueTask = openTasks.find((task) => task.dueDate && task.dueDate < today);
+  const inactiveDays = daysSince(latestActivity?.date);
 
   if (overdueTask) return { level: "risk", label: "超期", reason: `待办已过期：${overdueTask.title}` };
+  if (["方案报价", "谈判中"].includes(customer.stage) && inactiveDays !== null && inactiveDays >= 7) {
+    return { level: "risk", label: "停滞", reason: `${customer.stage} 已 ${inactiveDays} 天没有新跟进。` };
+  }
   if (!latestActivity && customer.stage !== "新线索") {
     return { level: "risk", label: "缺跟进", reason: "客户已推进，但还没有跟进记录。" };
   }
   if (customer.priority === "A" && !openTasks.length && customer.stage !== "已成交") {
     return { level: "watch", label: "需动作", reason: "A 类客户没有下一步待办。" };
+  }
+  if (inactiveDays !== null && inactiveDays >= 14 && customer.stage !== "已成交" && customer.stage !== "暂缓") {
+    return { level: "watch", label: "久未联系", reason: `已 ${inactiveDays} 天没有新跟进。` };
   }
   if (customer.priority === "D" && customer.stage !== "已成交") {
     return { level: "watch", label: "待激活", reason: "D 类客户需要判断是否继续投入时间。" };

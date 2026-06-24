@@ -1664,6 +1664,139 @@ textarea {
   margin-top: 4px;
 }
 
+.report-hero {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(241, 247, 255, 0.9)),
+    #ffffff;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.report-hero h3 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.report-hero p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.report-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.review-grid {
+  align-items: stretch;
+}
+
+.report-text {
+  background: #101820;
+  border-radius: 14px;
+  color: #e8f2ee;
+  font-size: 13px;
+  line-height: 1.72;
+  margin: 0;
+  max-height: 520px;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre-wrap;
+}
+
+.risk-list,
+.review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.risk-item,
+.review-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px;
+}
+
+.risk-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.risk-item.risk {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 239, 244, 0.88));
+  border-color: rgba(201, 52, 92, 0.2);
+}
+
+.risk-item.watch {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(255, 248, 232, 0.9));
+  border-color: rgba(217, 145, 20, 0.22);
+}
+
+.risk-item span {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  min-height: 24px;
+  padding: 3px 8px;
+}
+
+.risk-item.risk span {
+  background: #ffe8ee;
+  color: var(--risk);
+}
+
+.risk-item.watch span {
+  background: #fff1d0;
+  color: #a85e00;
+}
+
+.risk-item strong,
+.review-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.risk-item small,
+.review-row small {
+  color: #5d6369;
+  display: block;
+  line-height: 1.55;
+  margin-top: 4px;
+}
+
+.risk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.review-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+.review-row.done {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(237, 250, 244, 0.9));
+  border-color: rgba(22, 132, 95, 0.16);
+}
+
+.review-row.done svg {
+  color: var(--good);
+}
+
 .auth-shell {
   align-items: center;
   background:
@@ -2350,6 +2483,32 @@ textarea {
 
   .lead-actions {
     grid-template-columns: 1fr;
+  }
+
+  .report-hero,
+  .report-actions,
+  .risk-item,
+  .review-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .report-hero,
+  .report-actions {
+    flex-direction: column;
+  }
+
+  .report-actions .primary-button,
+  .report-actions .secondary-button,
+  .risk-actions,
+  .risk-actions .ghost-button,
+  .review-row .ghost-button {
+    width: 100%;
+  }
+
+  .risk-actions {
+    justify-content: stretch;
   }
 
   .stage-column {
