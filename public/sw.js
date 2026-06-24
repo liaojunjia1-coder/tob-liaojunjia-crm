@@ -1,11 +1,12 @@
-const CACHE_NAME = "sales-crm-app-v7";
+const CACHE_NAME = "sales-crm-app-v8";
+const APP_ROOT = new URL("./", self.registration.scope).toString();
 const APP_SHELL = [
-  "/",
-  "/manifest.webmanifest",
-  "/icons/icon.svg",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/apple-touch-icon.png",
+  "./",
+  "./manifest.webmanifest",
+  "./icons/icon.svg",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -31,10 +32,10 @@ self.addEventListener("fetch", (event) => {
       fetch(event.request)
         .then((networkResponse) => {
           const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", responseClone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(APP_ROOT, responseClone));
           return networkResponse;
         })
-        .catch(() => caches.match("/")),
+        .catch(() => caches.match(APP_ROOT)),
     );
     return;
   }
@@ -52,7 +53,7 @@ self.addEventListener("fetch", (event) => {
           }
           return networkResponse;
         })
-        .catch(() => caches.match("/"));
+        .catch(() => caches.match(APP_ROOT));
     }),
   );
 });

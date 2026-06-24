@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
+  BookOpen,
   Brain,
   Check,
   Circle,
+  ClipboardList,
   Download,
   Edit3,
+  HandCoins,
   LayoutDashboard,
   Lock,
   LogOut,
@@ -17,8 +20,10 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Target,
   Trash2,
   TrendingUp,
+  Upload,
   User,
   UserPlus,
   Users,
@@ -41,28 +46,53 @@ const STORAGE_KEY = "apprentice-sales-crm-v1";
 const TOKEN_KEY = "sales-crm-token-v2";
 const USER_KEY = "sales-crm-user-v2";
 const REMEMBER_KEY = "sales-crm-remember-v1";
+const REVIEW_DRAFT_KEY = "sales-crm-review-draft-v1";
 const STATIC_LOCAL_MODE = import.meta.env.VITE_STATIC_LOCAL_MODE === "true";
 
 const STAGES = [
-  { id: "新线索", probability: 10 },
-  { id: "已联系", probability: 20 },
-  { id: "需求确认", probability: 40 },
-  { id: "方案报价", probability: 60 },
-  { id: "谈判中", probability: 80 },
-  { id: "已成交", probability: 100 },
-  { id: "暂缓", probability: 0 },
+  { id: "新线索", probability: 10, tone: "lead" },
+  { id: "已联系", probability: 20, tone: "contacted" },
+  { id: "需求确认", probability: 40, tone: "discovery" },
+  { id: "方案报价", probability: 60, tone: "proposal" },
+  { id: "谈判中", probability: 80, tone: "negotiation" },
+  { id: "已成交", probability: 100, tone: "won" },
+  { id: "暂缓", probability: 0, tone: "paused" },
 ];
 
 const METHODS = ["电话", "微信", "邮件", "拜访", "视频会议"];
-const PRIORITIES = ["A", "B", "C"];
+const PRIORITIES = ["A", "B", "C", "D"];
 const TASK_PRIORITIES = ["高", "中", "低"];
+const CONTRACT_STATUS = ["合同审核", "已签约", "部分回款", "已回款", "逾期", "暂停"];
+const FOLLOWUP_TEMPLATES = [
+  {
+    label: "电话沟通",
+    method: "电话",
+    content: "沟通结论：\n客户当前情况：\n核心问题：\n预算/决策人：\n客户态度：",
+    nextStep: "下一步：补齐预算和决策链，约定下次沟通时间。",
+  },
+  {
+    label: "拜访复盘",
+    method: "拜访",
+    content: "拜访结论：\n现场看到的问题：\n关键人态度：\n竞品/替代方案：\n风险点：",
+    nextStep: "下一步：整理拜访纪要和方案范围，发给客户确认。",
+  },
+  {
+    label: "报价跟进",
+    method: "微信",
+    content: "报价反馈：\n客户卡点：\n价格/范围是否匹配：\n审批流程：\n还缺什么材料：",
+    nextStep: "下一步：约 15 分钟报价复盘，确认价格、范围和决策流程。",
+  },
+];
 
 const VIEWS = [
   { id: "dashboard", label: "看板", icon: LayoutDashboard },
   { id: "pipeline", label: "漏斗", icon: TrendingUp },
   { id: "customers", label: "客户", icon: Users },
+  { id: "leads", label: "线索池", icon: Target },
   { id: "followups", label: "跟进", icon: MessageSquare },
   { id: "tasks", label: "待办", icon: Bell },
+  { id: "contracts", label: "合同回款", icon: HandCoins },
+  { id: "playbook", label: "销售工具", icon: BookOpen },
 ];
 
 const emptyCustomer = {
@@ -74,8 +104,23 @@ const emptyCustomer = {
   amount: "",
   priority: "B",
   source: "",
-  closeDate: "",
+  recordedAt: "",
+  painPoint: "",
+  decisionMaker: "",
+  competitor: "",
   tags: "",
+  note: "",
+};
+
+const emptyContract = {
+  customerId: "",
+  title: "",
+  contractNo: "",
+  amount: "",
+  paidAmount: "",
+  status: "合同审核",
+  signDate: "",
+  paymentDue: "",
   note: "",
 };
 
@@ -91,47 +136,92 @@ const defaultData = {
     {
       id: "c-1",
       company: "深圳智造设备有限公司",
-      contact: "林经理",
+      contact: "林经理 / 设备部",
       phone: "138-0000-1001",
       industry: "工业自动化",
-      stage: "需求确认",
-      amount: "180000",
+      stage: "方案报价",
+      amount: "260000",
       priority: "A",
-      source: "转介绍",
-      closeDate: "2026-06-28",
-      tags: "产线升级,售后响应",
-      note: "关注产线改造和售后响应速度。",
-      createdAt: "2026-06-09T09:00:00.000Z",
+      source: "老客户转介绍",
+      recordedAt: "2026-06-14",
+      painPoint: "产线停机等待多，人工巡检效率低",
+      decisionMaker: "老板看 ROI，设备部评估技术可行性",
+      competitor: "本地集成商",
+      tags: "产线升级,停机损失,技术评估,老板关注ROI",
+      note: "客户有两条包装线准备升级，核心诉求是减少人工巡检和停机等待。采购会看价格，老板更关心三个月内能否看到效率提升。",
+      createdAt: "2026-06-14T09:00:00.000Z",
     },
     {
       id: "c-2",
       company: "前海云贸科技",
-      contact: "周总",
+      contact: "周总 / 创始人",
       phone: "微信 zhou-sales",
       industry: "外贸 SaaS",
       stage: "方案报价",
-      amount: "68000",
-      priority: "B",
+      amount: "88000",
+      priority: "A",
       source: "展会线索",
-      closeDate: "2026-06-24",
-      tags: "询盘分配,跟进提醒",
-      note: "需要提升询盘跟进效率，月底前要看方案。",
-      createdAt: "2026-06-09T09:15:00.000Z",
+      recordedAt: "2026-06-14",
+      painPoint: "询盘分配靠人工，报价后缺少复盘提醒",
+      decisionMaker: "周总最终拍板，销售主管参与试用",
+      competitor: "表格和企业微信群",
+      tags: "询盘分配,销售过程看板,报价跟进,老板决策",
+      note: "团队有 8 个外贸销售，询盘来自展会、阿里国际站和独立站。当前痛点是线索分配靠表格，报价后缺少提醒，容易丢单。",
+      createdAt: "2026-06-14T09:15:00.000Z",
     },
     {
       id: "c-3",
       company: "华南精密制造",
-      contact: "陈主管",
+      contact: "陈主管 / 生产主管",
       phone: "0755-8888-2233",
       industry: "制造业",
-      stage: "已联系",
-      amount: "120000",
+      stage: "需求确认",
+      amount: "150000",
       priority: "B",
       source: "自拓",
-      closeDate: "",
-      tags: "巡检数字化",
-      note: "先从设备巡检记录数字化切入。",
-      createdAt: "2026-06-09T09:30:00.000Z",
+      recordedAt: "2026-06-14",
+      painPoint: "纸质巡检记录分散，质量异常追溯慢",
+      decisionMaker: "生产主管发起，信息化负责人和老板确认预算",
+      competitor: "纸质表格",
+      tags: "巡检数字化,质量追溯,生产报表",
+      note: "客户目前用纸质表记录设备巡检，质量问题追溯慢。下一步需要确认信息化预算和谁负责最终拍板。",
+      createdAt: "2026-06-14T09:30:00.000Z",
+    },
+    {
+      id: "c-4",
+      company: "东莞欧瑞家居用品",
+      contact: "李经理 / 外贸负责人",
+      phone: "微信 euro-li",
+      industry: "外贸制造",
+      stage: "已联系",
+      amount: "56000",
+      priority: "B",
+      source: "LinkedIn 开发",
+      recordedAt: "2026-06-16",
+      painPoint: "样品寄送和海外报价跟进容易断档",
+      decisionMaker: "外贸负责人先评估，老板看转化效果",
+      competitor: "Excel 跟进表",
+      tags: "海外客户开发,样品跟进,英文邮件,展会复盘",
+      note: "客户做收纳和家居用品出口，最近在开发欧洲小 B 客户。适合管理海外询盘、样品寄送和报价提醒。",
+      createdAt: "2026-06-16T10:10:00.000Z",
+    },
+    {
+      id: "c-5",
+      company: "深圳星禾企业服务",
+      contact: "王总 / 销售总监",
+      phone: "136-0000-2299",
+      industry: "SaaS / 企业服务",
+      stage: "谈判中",
+      amount: "128000",
+      priority: "A",
+      source: "朋友介绍",
+      recordedAt: "2026-06-17",
+      painPoint: "销售扩张后新人跟进质量不稳定",
+      decisionMaker: "王总主导，老板关注试点结果",
+      competitor: "飞书表格",
+      tags: "销售团队扩张,新人SOP,续费风险,过程管理",
+      note: "客户销售团队从 12 人扩到 25 人，新人跟进习惯不稳定。这个客户适合观察销售过程、跟进风险和下一步动作是否清楚。",
+      createdAt: "2026-06-17T14:20:00.000Z",
     },
   ],
   activities: [
@@ -139,39 +229,144 @@ const defaultData = {
       id: "a-1",
       customerId: "c-1",
       method: "电话",
-      date: "2026-06-09",
-      content: "确认目前有两条产线准备做自动化升级。",
-      nextStep: "整理痛点清单，约技术同事一起沟通。",
-      createdAt: "2026-06-09T10:00:00.000Z",
+      date: "2026-06-18",
+      content: "确认目前有两条产线准备升级，客户最关心停机时间、改造周期和售后响应。",
+      nextStep: "整理 ROI 测算和现场调研问题，约技术同事一起开视频会。",
+      createdAt: "2026-06-18T10:00:00.000Z",
     },
     {
       id: "a-2",
       customerId: "c-2",
       method: "微信",
-      date: "2026-06-09",
-      content: "对方希望看到外贸询盘分配和跟进提醒。",
-      nextStep: "明天发一页方案和报价区间。",
-      createdAt: "2026-06-09T10:20:00.000Z",
+      date: "2026-06-20",
+      content: "周总反馈现在询盘分配靠人工转发，报价后没人提醒复盘，销售主管看不到每条线索卡在哪一步。",
+      nextStep: "发一页方案，重点讲线索分配、报价提醒和销售过程看板。",
+      createdAt: "2026-06-20T10:20:00.000Z",
+    },
+    {
+      id: "a-3",
+      customerId: "c-5",
+      method: "视频会议",
+      date: "2026-06-21",
+      content: "王总确认团队扩张后新人跟进质量不稳定，希望先用小范围试点看是否能提升复盘效率。",
+      nextStep: "把试点范围拆成 5 个销售、2 周、3 个指标：跟进及时率、商机阶段完整度、超期待办数。",
+      createdAt: "2026-06-21T15:30:00.000Z",
+    },
+    {
+      id: "a-4",
+      customerId: "c-3",
+      method: "拜访",
+      date: "2026-06-19",
+      content: "现场看到巡检表分散在班组，质量异常追溯要翻纸质记录，生产主管愿意先试一个车间。",
+      nextStep: "确认信息化负责人和预算区间，再判断是否进入方案报价。",
+      createdAt: "2026-06-19T16:00:00.000Z",
+    },
+    {
+      id: "a-5",
+      customerId: "c-4",
+      method: "邮件",
+      date: "2026-06-17",
+      content: "发送英文开发信后客户回复，想了解样品寄送后的跟进提醒和报价记录管理。",
+      nextStep: "准备一个外贸样品跟进场景，用截图说明从询盘到复盘的流程。",
+      createdAt: "2026-06-17T11:40:00.000Z",
     },
   ],
   tasks: [
     {
       id: "t-1",
       customerId: "c-2",
-      title: "给周总发外贸 SaaS 方案",
-      dueDate: "2026-06-10",
+      title: "给周总发外贸线索分配和报价提醒方案",
+      dueDate: "2026-06-24",
       priority: "高",
       done: false,
-      createdAt: "2026-06-09T11:00:00.000Z",
+      createdAt: "2026-06-20T11:00:00.000Z",
     },
     {
       id: "t-2",
       customerId: "c-1",
-      title: "约林经理二次需求沟通",
-      dueDate: "2026-06-11",
+      title: "约林经理和技术同事做二次需求沟通",
+      dueDate: "2026-06-25",
       priority: "中",
       done: false,
-      createdAt: "2026-06-09T11:10:00.000Z",
+      createdAt: "2026-06-18T11:10:00.000Z",
+    },
+    {
+      id: "t-3",
+      customerId: "c-5",
+      title: "给王总发 2 周销售过程试点计划",
+      dueDate: "2026-06-22",
+      priority: "高",
+      done: false,
+      createdAt: "2026-06-21T16:10:00.000Z",
+    },
+    {
+      id: "t-4",
+      customerId: "c-3",
+      title: "补充华南精密的信息化负责人和预算区间",
+      dueDate: "2026-06-26",
+      priority: "中",
+      done: false,
+      createdAt: "2026-06-19T17:00:00.000Z",
+    },
+    {
+      id: "t-5",
+      customerId: "c-4",
+      title: "准备外贸样品跟进流程截图",
+      dueDate: "2026-06-27",
+      priority: "低",
+      done: false,
+      createdAt: "2026-06-17T12:00:00.000Z",
+    },
+    {
+      id: "t-6",
+      customerId: "c-1",
+      title: "已完成：整理产线升级痛点清单",
+      dueDate: "2026-06-22",
+      priority: "中",
+      done: true,
+      createdAt: "2026-06-18T11:20:00.000Z",
+    },
+  ],
+  contracts: [
+    {
+      id: "ct-1",
+      customerId: "c-5",
+      title: "销售过程试点服务合同",
+      contractNo: "LJ-202606-001",
+      amount: "128000",
+      paidAmount: "30000",
+      status: "部分回款",
+      signDate: "2026-06-21",
+      paymentDue: "2026-06-28",
+      note: "首款已收，尾款在试点复盘后确认。",
+      createdAt: "2026-06-21T16:30:00.000Z",
+    },
+    {
+      id: "ct-2",
+      customerId: "c-2",
+      title: "外贸询盘管理试用报价",
+      contractNo: "LJ-202606-002",
+      amount: "88000",
+      paidAmount: "0",
+      status: "合同审核",
+      signDate: "",
+      paymentDue: "2026-06-30",
+      note: "等周总确认试用范围和付款节点。",
+      createdAt: "2026-06-20T12:00:00.000Z",
+    },
+  ],
+  logs: [
+    {
+      id: "log-1",
+      type: "跟进",
+      text: "记录了前海云贸科技的报价跟进。",
+      createdAt: "2026-06-20T10:20:00.000Z",
+    },
+    {
+      id: "log-2",
+      type: "待办",
+      text: "生成了王总试点计划待办。",
+      createdAt: "2026-06-21T16:10:00.000Z",
     },
   ],
   settings: defaultSettings,
@@ -187,6 +382,80 @@ function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function withLog(data, type, text) {
+  return {
+    ...data,
+    logs: [
+      {
+        id: makeId("log"),
+        type,
+        text,
+        createdAt: new Date().toISOString(),
+      },
+      ...(data.logs || []),
+    ].slice(0, 30),
+  };
+}
+
+function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows) {
+  return rows
+    .map((row) =>
+      row
+        .map((value) => {
+          const text = String(value ?? "");
+          return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+        })
+        .join(","),
+    )
+    .join("\n");
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+
 function stageMeta(stage) {
   return STAGES.find((item) => item.id === stage) || STAGES[0];
 }
@@ -194,9 +463,15 @@ function stageMeta(stage) {
 function normalizeData(raw) {
   const source = raw && typeof raw === "object" ? raw : defaultData;
   return {
-    customers: (source.customers || []).map((customer) => ({ ...emptyCustomer, ...customer })),
+    customers: (source.customers || []).map((customer) => ({
+      ...emptyCustomer,
+      ...customer,
+      recordedAt: customer.recordedAt || customer.closeDate || todayInputValue(),
+    })),
     activities: source.activities || [],
     tasks: (source.tasks || []).map((task) => ({ priority: "中", ...task })),
+    contracts: (source.contracts || []).map((contract) => ({ ...emptyContract, ...contract })),
+    logs: source.logs || [],
     settings: { ...defaultSettings, ...(source.settings || {}) },
   };
 }
@@ -215,6 +490,23 @@ function rememberedCredentials() {
     return JSON.parse(window.localStorage.getItem(REMEMBER_KEY));
   } catch {
     return null;
+  }
+}
+
+function emptyReviewDraft() {
+  return {
+    conclusion: "",
+    blocker: "",
+    nextStep: "",
+    ability: "",
+  };
+}
+
+function loadReviewDraft() {
+  try {
+    return { ...emptyReviewDraft(), ...JSON.parse(window.localStorage.getItem(REVIEW_DRAFT_KEY)) };
+  } catch {
+    return emptyReviewDraft();
   }
 }
 
@@ -281,13 +573,14 @@ function App() {
   const [rememberLogin, setRememberLogin] = useState(Boolean(remembered?.remember));
   const [authForm, setAuthForm] = useState({
     name: "tob廖俊嘉",
-    email: remembered?.email || (CLOUD_MODE || STATIC_LOCAL_MODE ? "" : "liaojunjia@crm.local"),
+    email: remembered?.email || (CLOUD_MODE ? "" : "liaojunjia@crm.local"),
     password: remembered?.password || (CLOUD_MODE ? "" : "12345678"),
   });
   const [profileForm, setProfileForm] = useState({ name: "tob廖俊嘉", title: "ToB 销售", phone: "" });
   const [passwordForm, setPasswordForm] = useState({ nextPassword: "12345678" });
   const [data, setData] = useState(loadLocalData);
   const [syncStatus, setSyncStatus] = useState("本机缓存");
+  const [backupStatus, setBackupStatus] = useState("");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(
     () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true,
@@ -296,6 +589,9 @@ function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [searchText, setSearchText] = useState("");
   const [stageFilter, setStageFilter] = useState("全部");
+  const [priorityFilter, setPriorityFilter] = useState("全部评级");
+  const [riskFilter, setRiskFilter] = useState("全部风险");
+  const [customerSort, setCustomerSort] = useState("风险优先");
   const [todoFilter, setTodoFilter] = useState("未完成");
   const [customerForm, setCustomerForm] = useState(emptyCustomer);
   const [editingCustomerId, setEditingCustomerId] = useState("");
@@ -309,12 +605,19 @@ function App() {
     date: todayInputValue(),
     content: "",
     nextStep: "",
+    makeTask: true,
+    taskDueDate: todayInputValue(),
+    taskPriority: "中",
   });
   const [taskForm, setTaskForm] = useState({
     customerId: "",
     title: "",
     dueDate: todayInputValue(),
     priority: defaultSettings.defaultTaskPriority,
+  });
+  const [contractForm, setContractForm] = useState({
+    ...emptyContract,
+    paymentDue: todayInputValue(),
   });
 
   useEffect(() => {
@@ -445,6 +748,7 @@ function App() {
         customerId: firstId,
         priority: data.settings.defaultTaskPriority || "中",
       }));
+      setContractForm((form) => ({ ...form, customerId: firstId }));
     }
   }, [data.customers, data.settings.defaultTaskPriority, selectedCustomerId]);
 
@@ -470,7 +774,7 @@ function App() {
     });
     setData(nextData);
     setSelectedCustomerId(nextData.customers[0]?.id || "");
-    setSyncStatus(STATIC_LOCAL_MODE ? "本机已保存" : "云端已同步");
+    setSyncStatus(CLOUD_MODE ? "云端已同步" : "本机已保存");
     setAuthReady(true);
   }
 
@@ -490,9 +794,9 @@ function App() {
           body: JSON.stringify({ data: nextData }),
         });
       }
-      setSyncStatus("云端已同步");
+      setSyncStatus(CLOUD_MODE ? "云端已同步" : "本机已保存");
     } catch {
-      setSyncStatus("云端待同步");
+      setSyncStatus(CLOUD_MODE ? "云端待同步" : "本机待保存");
     }
   }
 
@@ -593,6 +897,167 @@ function App() {
     commit({ ...data, settings: { ...data.settings, ...nextSettings } });
   }
 
+  function exportBackup() {
+    const payload = {
+      app: "tob-liaojunjia-crm",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: normalizeData(data),
+    };
+    downloadTextFile(
+      `tob-crm-backup-${todayInputValue()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8",
+    );
+    setBackupStatus("已生成备份文件。换手机或换浏览器时，可用这个文件导入恢复。");
+  }
+
+  function exportCustomersCsv() {
+    const rows = [
+      [
+        "公司",
+        "联系人",
+        "电话",
+        "行业",
+        "阶段",
+        "评级",
+        "预计金额",
+        "来源",
+        "建档日期",
+        "核心痛点",
+        "决策链",
+        "竞品",
+        "标签",
+        "备注",
+      ],
+      ...data.customers.map((customer) => [
+        customer.company,
+        customer.contact,
+        customer.phone,
+        customer.industry,
+        customer.stage,
+        customer.priority,
+        customer.amount,
+        customer.source,
+        customer.recordedAt,
+        customer.painPoint,
+        customer.decisionMaker,
+        customer.competitor,
+        customer.tags,
+        customer.note,
+      ]),
+    ];
+    downloadTextFile(`客户清单-${todayInputValue()}.csv`, `\ufeff${toCsv(rows)}`, "text/csv;charset=utf-8");
+    setBackupStatus("已导出客户 CSV，可直接用 Excel 或表格软件打开。");
+  }
+
+  function exportTasksCsv() {
+    const rows = [
+      ["待办", "关联客户", "截止日期", "优先级", "状态", "创建时间"],
+      ...data.tasks.map((task) => [
+        task.title,
+        customerName(data.customers, task.customerId),
+        task.dueDate,
+        task.priority,
+        task.done ? "已完成" : "未完成",
+        String(task.createdAt || "").slice(0, 10),
+      ]),
+    ];
+    downloadTextFile(`待办清单-${todayInputValue()}.csv`, `\ufeff${toCsv(rows)}`, "text/csv;charset=utf-8");
+    setBackupStatus("已导出待办 CSV，适合做日报、复盘或外部整理。");
+  }
+
+  async function importCustomersCsv(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const rows = parseCsv((await file.text()).replace(/^\ufeff/, ""));
+      const headers = rows[0]?.map((header) => header.trim()) || [];
+      const bodyRows = rows.slice(1);
+      const getValue = (row, names) => {
+        const index = names.map((name) => headers.indexOf(name)).find((item) => item >= 0);
+        return index >= 0 ? String(row[index] || "").trim() : "";
+      };
+      const imported = bodyRows
+        .map((row) => {
+          const stage = getValue(row, ["阶段", "客户阶段"]) || "新线索";
+          const priority = (getValue(row, ["评级", "客户评级"]) || "B").replace("类", "").trim();
+          return {
+            id: makeId("c"),
+            company: getValue(row, ["公司", "公司名", "客户公司"]),
+            contact: getValue(row, ["联系人", "客户姓名", "姓名"]),
+            phone: getValue(row, ["电话", "电话/微信", "联系方式", "手机号"]),
+            industry: getValue(row, ["行业"]),
+            stage: STAGES.some((item) => item.id === stage) ? stage : "新线索",
+            amount: getValue(row, ["预计金额", "金额", "预算"]),
+            priority: PRIORITIES.includes(priority) ? priority : "B",
+            source: getValue(row, ["来源", "线索来源"]),
+            recordedAt: getValue(row, ["建档日期", "记录日期", "日期"]) || todayInputValue(),
+            painPoint: getValue(row, ["核心痛点", "痛点", "需求"]),
+            decisionMaker: getValue(row, ["决策链", "决策人", "关键人"]),
+            competitor: getValue(row, ["竞品", "竞品/替代方案", "替代方案"]),
+            tags: getValue(row, ["标签"]),
+            note: getValue(row, ["备注", "说明"]),
+            createdAt: new Date().toISOString(),
+          };
+        })
+        .filter((customer) => customer.company);
+
+      if (!imported.length) {
+        setBackupStatus("没有识别到客户。CSV 至少需要一列「公司」或「公司名」。");
+        return;
+      }
+
+      const confirmed = window.confirm(`识别到 ${imported.length} 个客户，将追加到当前客户池，不会覆盖现有数据。是否导入？`);
+      if (!confirmed) {
+        setBackupStatus("已取消客户 CSV 导入。");
+        return;
+      }
+
+      commit({
+        ...withLog(data, "客户", `批量导入客户：${imported.length} 个`),
+        customers: [...imported, ...data.customers],
+      });
+      setSelectedCustomerId(imported[0].id);
+      setBackupStatus(`已导入 ${imported.length} 个客户。`);
+    } catch {
+      setBackupStatus("导入失败，请确认文件是 CSV 格式，并包含表头。");
+    }
+  }
+
+  async function importBackup(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const payload = JSON.parse(await file.text());
+      const sourceData = payload?.data || payload;
+      if (!Array.isArray(sourceData?.customers) || !Array.isArray(sourceData?.activities) || !Array.isArray(sourceData?.tasks)) {
+        throw new Error("文件不是有效的 CRM 备份。");
+      }
+      const nextData = normalizeData(sourceData);
+      const confirmed = window.confirm(
+        `将导入 ${nextData.customers.length} 个客户、${nextData.activities.length} 条跟进、${nextData.tasks.length} 个待办，并覆盖当前浏览器里的 CRM 数据。是否继续？`,
+      );
+      if (!confirmed) {
+        setBackupStatus("已取消导入，当前数据未改变。");
+        return;
+      }
+      commit(nextData);
+      const firstId = nextData.customers[0]?.id || "";
+      setSelectedCustomerId(firstId);
+      setActivityForm((form) => ({ ...form, customerId: firstId }));
+      setTaskForm((form) => ({ ...form, customerId: firstId }));
+      setContractForm((form) => ({ ...form, customerId: firstId }));
+      setBackupStatus("导入成功。当前浏览器已恢复这份 CRM 数据。");
+    } catch (error) {
+      setBackupStatus(error.message || "导入失败，请确认文件格式。");
+    }
+  }
+
   async function installApp() {
     if (!installPrompt) return;
     installPrompt.prompt();
@@ -612,23 +1077,45 @@ function App() {
 
   const filteredCustomers = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
-    return data.customers.filter((customer) => {
-      const matchesKeyword =
-        !keyword ||
-        [customer.company, customer.contact, customer.phone, customer.industry, customer.tags, customer.source]
-          .join(" ")
-          .toLowerCase()
-          .includes(keyword);
-      const matchesStage = stageFilter === "全部" || customer.stage === stageFilter;
-      return matchesKeyword && matchesStage;
-    });
-  }, [data.customers, searchText, stageFilter]);
+    return data.customers
+      .filter((customer) => {
+        const risk = customerRisk(customer, data.activities, data.tasks);
+        const matchesKeyword =
+          !keyword ||
+          [customer.company, customer.contact, customer.phone, customer.industry, customer.tags, customer.source]
+            .join(" ")
+            .toLowerCase()
+            .includes(keyword);
+        const matchesStage = stageFilter === "全部" || customer.stage === stageFilter;
+        const matchesPriority = priorityFilter === "全部评级" || `${customer.priority}类` === priorityFilter;
+        const matchesRisk =
+          riskFilter === "全部风险" ||
+          (riskFilter === "高风险" && risk.level === "risk") ||
+          (riskFilter === "需动作" && risk.level === "watch") ||
+          (riskFilter === "健康" && risk.level === "good");
+        return matchesKeyword && matchesStage && matchesPriority && matchesRisk;
+      })
+      .sort((a, b) => {
+        if (customerSort === "金额高到低") return Number(b.amount || 0) - Number(a.amount || 0);
+        if (customerSort === "评级优先") return customerPriorityRank(a.priority) - customerPriorityRank(b.priority);
+        if (customerSort === "新建优先") return String(b.recordedAt || b.createdAt || "").localeCompare(String(a.recordedAt || a.createdAt || ""));
+        return (
+          riskRank(customerRisk(a, data.activities, data.tasks).level) -
+            riskRank(customerRisk(b, data.activities, data.tasks).level) ||
+          customerPriorityRank(a.priority) - customerPriorityRank(b.priority)
+        );
+      });
+  }, [data.customers, data.activities, data.tasks, searchText, stageFilter, priorityFilter, riskFilter, customerSort]);
 
   const visibleTasks = useMemo(() => {
+    const today = todayInputValue();
     return data.tasks
       .filter((task) => {
         if (todoFilter === "未完成") return !task.done;
         if (todoFilter === "已完成") return task.done;
+        if (todoFilter === "今日") return !task.done && task.dueDate === today;
+        if (todoFilter === "超期") return !task.done && task.dueDate && task.dueDate < today;
+        if (todoFilter === "高优先级") return !task.done && task.priority === "高";
         return true;
       })
       .sort(
@@ -650,7 +1137,11 @@ function App() {
     }, 0);
     const aCustomers = data.customers.filter((customer) => customer.priority === "A").length;
     const atRisk = data.customers.filter((customer) => customerRisk(customer, data.activities, data.tasks).level === "risk");
-    return { openTasks, overdueTasks, totalAmount, forecast, aCustomers, atRisk };
+    const receivable = data.contracts.reduce(
+      (sum, contract) => sum + Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0)),
+      0,
+    );
+    return { openTasks, overdueTasks, totalAmount, forecast, aCustomers, atRisk, receivable };
   }, [data]);
 
   const customerActivities = useMemo(
@@ -660,7 +1151,7 @@ function App() {
 
   function openNewCustomerForm() {
     setEditingCustomerId("");
-    setCustomerForm(emptyCustomer);
+    setCustomerForm({ ...emptyCustomer, recordedAt: todayInputValue() });
     setShowCustomerForm(true);
     setActiveView("customers");
   }
@@ -682,6 +1173,10 @@ function App() {
       industry: customerForm.industry.trim(),
       amount: String(customerForm.amount || "").trim(),
       source: customerForm.source.trim(),
+      recordedAt: customerForm.recordedAt || todayInputValue(),
+      painPoint: customerForm.painPoint.trim(),
+      decisionMaker: customerForm.decisionMaker.trim(),
+      competitor: customerForm.competitor.trim(),
       tags: customerForm.tags.trim(),
       note: customerForm.note.trim(),
     };
@@ -689,17 +1184,18 @@ function App() {
 
     if (editingCustomerId) {
       commit({
-        ...data,
+        ...withLog(data, "客户", `更新客户档案：${clean.company}`),
         customers: data.customers.map((customer) =>
           customer.id === editingCustomerId ? { ...customer, ...clean } : customer,
         ),
       });
     } else {
       const nextCustomer = { id: makeId("c"), ...clean, createdAt: new Date().toISOString() };
-      commit({ ...data, customers: [nextCustomer, ...data.customers] });
+      commit({ ...withLog(data, "客户", `新增客户：${nextCustomer.company}`), customers: [nextCustomer, ...data.customers] });
       setSelectedCustomerId(nextCustomer.id);
       setActivityForm((form) => ({ ...form, customerId: nextCustomer.id }));
       setTaskForm((form) => ({ ...form, customerId: nextCustomer.id }));
+      setContractForm((form) => ({ ...form, customerId: nextCustomer.id }));
     }
 
     setShowCustomerForm(false);
@@ -714,14 +1210,16 @@ function App() {
       customers: remainingCustomers,
       activities: data.activities.filter((activity) => activity.customerId !== id),
       tasks: data.tasks.filter((task) => task.customerId !== id),
+      contracts: data.contracts.filter((contract) => contract.customerId !== id),
     });
     setSelectedCustomerId(remainingCustomers[0]?.id || "");
     setAiInsight(null);
   }
 
   function updateCustomerField(customerId, field, value) {
+    const targetCustomer = data.customers.find((customer) => customer.id === customerId);
     commit({
-      ...data,
+      ...withLog(data, "客户", `更新${targetCustomer?.company || "客户"}：${field === "stage" ? "阶段" : "字段"}`),
       customers: data.customers.map((customer) =>
         customer.id === customerId ? { ...customer, [field]: value } : customer,
       ),
@@ -773,16 +1271,43 @@ function App() {
   function saveActivity(event) {
     event.preventDefault();
     if (!activityForm.customerId || !activityForm.content.trim()) return;
+    const { makeTask, taskDueDate, taskPriority, ...activityFields } = activityForm;
     const nextActivity = {
       id: makeId("a"),
-      ...activityForm,
+      ...activityFields,
       content: activityForm.content.trim(),
       nextStep: activityForm.nextStep.trim(),
       createdAt: new Date().toISOString(),
     };
-    commit({ ...data, activities: [nextActivity, ...data.activities] });
+    const nextTasks =
+      makeTask && activityForm.nextStep.trim()
+        ? [
+          {
+            id: makeId("t"),
+            customerId: activityForm.customerId,
+            title: activityForm.nextStep.trim(),
+            dueDate: taskDueDate || todayInputValue(),
+            priority: taskPriority || "中",
+            done: false,
+            createdAt: new Date().toISOString(),
+          },
+          ...data.tasks,
+        ]
+        : data.tasks;
+    const targetCustomer = data.customers.find((customer) => customer.id === activityForm.customerId);
+    commit({
+      ...withLog(data, "跟进", `记录跟进：${targetCustomer?.company || "客户"}`),
+      activities: [nextActivity, ...data.activities],
+      tasks: nextTasks,
+    });
     setSelectedCustomerId(activityForm.customerId);
-    setActivityForm((form) => ({ ...form, content: "", nextStep: "" }));
+    setActivityForm((form) => ({
+      ...form,
+      content: "",
+      nextStep: "",
+      taskDueDate: todayInputValue(),
+      taskPriority: data.settings.defaultTaskPriority || "中",
+    }));
     setFollowupAi(null);
     go("customers");
   }
@@ -797,20 +1322,122 @@ function App() {
       done: false,
       createdAt: new Date().toISOString(),
     };
-    commit({ ...data, tasks: [nextTask, ...data.tasks] });
+    commit({ ...withLog(data, "待办", `新增待办：${nextTask.title}`), tasks: [nextTask, ...data.tasks] });
     setTaskForm((form) => ({ ...form, title: "" }));
     go("tasks");
   }
 
   function toggleTask(taskId) {
+    const targetTask = data.tasks.find((task) => task.id === taskId);
     commit({
-      ...data,
+      ...withLog(data, "待办", `${targetTask?.done ? "恢复" : "完成"}待办：${targetTask?.title || ""}`),
       tasks: data.tasks.map((task) => (task.id === taskId ? { ...task, done: !task.done } : task)),
     });
   }
 
   function deleteTask(taskId) {
-    commit({ ...data, tasks: data.tasks.filter((task) => task.id !== taskId) });
+    commit({ ...withLog(data, "待办", "删除待办"), tasks: data.tasks.filter((task) => task.id !== taskId) });
+  }
+
+  function createLeadFollowTask(customerId) {
+    const customer = data.customers.find((item) => item.id === customerId);
+    if (!customer) return;
+    const risk = customerRisk(customer, data.activities, data.tasks);
+    const nextTask = {
+      id: makeId("t"),
+      customerId,
+      title: leadTaskTitle(customer, risk),
+      dueDate: todayInputValue(),
+      priority: risk.level === "risk" || customer.priority === "A" ? "高" : "中",
+      done: false,
+      createdAt: new Date().toISOString(),
+    };
+    commit({ ...withLog(data, "待办", `生成客户待办：${customer.company}`), tasks: [nextTask, ...data.tasks] });
+    setSyncStatus("已生成线索待办");
+  }
+
+  function generateDailyPlan() {
+    const today = todayInputValue();
+    const candidates = data.customers.filter((customer) => {
+      if (customer.stage === "已成交" || customer.stage === "暂缓") return false;
+      const hasOpenTask = data.tasks.some((task) => task.customerId === customer.id && !task.done);
+      if (hasOpenTask) return false;
+      const risk = customerRisk(customer, data.activities, data.tasks);
+      return (
+        risk.level !== "good" ||
+        customer.priority === "A" ||
+        customer.stage === "方案报价" ||
+        customer.stage === "谈判中"
+      );
+    });
+
+    const nextTasks = candidates.slice(0, 8).map((customer) => {
+      const risk = customerRisk(customer, data.activities, data.tasks);
+      return {
+        id: makeId("t"),
+        customerId: customer.id,
+        title: leadTaskTitle(customer, risk),
+        dueDate: today,
+        priority: risk.level === "risk" || customer.priority === "A" || customer.stage === "谈判中" ? "高" : "中",
+        done: false,
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    if (!nextTasks.length) {
+      setSyncStatus("今日计划已是最新");
+      return;
+    }
+
+    commit({
+      ...withLog(data, "待办", `生成今日跟进计划：${nextTasks.length} 个待办`),
+      tasks: [...nextTasks, ...data.tasks],
+    });
+    setSyncStatus(`已生成 ${nextTasks.length} 个今日待办`);
+    setTodoFilter("今日");
+  }
+
+  function saveContract(event) {
+    event.preventDefault();
+    if (!contractForm.customerId || !contractForm.title.trim()) return;
+    const nextContract = {
+      id: makeId("ct"),
+      ...contractForm,
+      title: contractForm.title.trim(),
+      contractNo: contractForm.contractNo.trim(),
+      amount: String(contractForm.amount || "").trim(),
+      paidAmount: String(contractForm.paidAmount || "").trim(),
+      note: contractForm.note.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    commit({ ...withLog(data, "合同", `新增合同：${nextContract.title}`), contracts: [nextContract, ...data.contracts] });
+    setContractForm((form) => ({
+      ...emptyContract,
+      customerId: form.customerId,
+      paymentDue: todayInputValue(),
+    }));
+    go("contracts");
+  }
+
+  function deleteContract(contractId) {
+    commit({ ...withLog(data, "合同", "删除合同/回款记录"), contracts: data.contracts.filter((contract) => contract.id !== contractId) });
+  }
+
+  function updateContract(contractId, patch) {
+    commit({
+      ...withLog(data, "合同", "更新合同/回款状态"),
+      contracts: data.contracts.map((contract) => (contract.id === contractId ? { ...contract, ...patch } : contract)),
+    });
+  }
+
+  function markContractPaid(contractId) {
+    const contract = data.contracts.find((item) => item.id === contractId);
+    if (!contract) return;
+    updateContract(contractId, {
+      paidAmount: String(contract.amount || contract.paidAmount || 0),
+      status: "已回款",
+      paymentDue: contract.paymentDue || todayInputValue(),
+    });
   }
 
   if (!authReady) return <LoadingScreen />;
@@ -893,21 +1520,27 @@ function App() {
           <DashboardView
             data={data}
             metrics={metrics}
+            onGeneratePlan={generateDailyPlan}
             onPickCustomer={(id) => {
               setSelectedCustomerId(id);
               go("customers");
             }}
+            onToggleTask={toggleTask}
             onViewPipeline={() => go("pipeline")}
+            onViewTasks={() => go("tasks")}
           />
         )}
 
         {activeView === "pipeline" && (
           <PipelineView
+            activities={data.activities}
             customers={data.customers}
+            onStageChange={(id, stage) => updateCustomerField(id, "stage", stage)}
             onPickCustomer={(id) => {
               setSelectedCustomerId(id);
               go("customers");
             }}
+            tasks={data.tasks}
           />
         )}
 
@@ -920,6 +1553,7 @@ function App() {
             customers={filteredCustomers}
             data={data}
             onAnalyze={analyzeCustomer}
+            onCreateTask={createLeadFollowTask}
             onDelete={deleteCustomer}
             onEdit={openEditCustomerForm}
             onFieldChange={updateCustomerField}
@@ -928,11 +1562,31 @@ function App() {
               go("followups");
             }}
             onPickCustomer={setSelectedCustomerId}
+            priorityFilter={priorityFilter}
+            riskFilter={riskFilter}
+            customerSort={customerSort}
             searchText={searchText}
             selectedCustomerId={selectedCustomer?.id}
+            setCustomerSort={setCustomerSort}
+            setPriorityFilter={setPriorityFilter}
+            setRiskFilter={setRiskFilter}
             setSearchText={setSearchText}
             setStageFilter={setStageFilter}
             stageFilter={stageFilter}
+          />
+        )}
+
+        {activeView === "leads" && (
+          <LeadCenterView
+            activities={data.activities}
+            customers={data.customers}
+            onCreateTask={createLeadFollowTask}
+            onPickCustomer={(id) => {
+              setSelectedCustomerId(id);
+              go("customers");
+            }}
+            onStageChange={(id, stage) => updateCustomerField(id, "stage", stage)}
+            tasks={data.tasks}
           />
         )}
 
@@ -965,10 +1619,31 @@ function App() {
           />
         )}
 
+        {activeView === "contracts" && (
+          <ContractsView
+            contractForm={contractForm}
+            contracts={data.contracts}
+            customers={data.customers}
+            onContractChange={updateContract}
+            onChange={setContractForm}
+            onDelete={deleteContract}
+            onMarkPaid={markContractPaid}
+            onSave={saveContract}
+          />
+        )}
+
+        {activeView === "playbook" && <PlaybookView />}
+
         {activeView === "settings" && (
           <SettingsView
+            backupStatus={backupStatus}
             data={data}
             onChangePassword={changePassword}
+            onExportBackup={exportBackup}
+            onExportCustomersCsv={exportCustomersCsv}
+            onExportTasksCsv={exportTasksCsv}
+            onImportCustomersCsv={importCustomersCsv}
+            onImportBackup={importBackup}
             onPasswordChange={setPasswordForm}
             onProfileChange={setProfileForm}
             onSaveProfile={saveProfile}
@@ -998,7 +1673,7 @@ function App() {
   );
 }
 
-function DashboardView({ data, metrics, onPickCustomer, onViewPipeline }) {
+function DashboardView({ data, metrics, onGeneratePlan, onPickCustomer, onToggleTask, onViewPipeline, onViewTasks }) {
   return (
     <section className="view">
       <div className="metrics-grid">
@@ -1008,21 +1683,187 @@ function DashboardView({ data, metrics, onPickCustomer, onViewPipeline }) {
         <Metric title="超期待办" value={metrics.overdueTasks.length} detail={`${metrics.openTasks.length} 个未完成`} />
       </div>
 
+      <BusinessGuide />
+
+      <BusinessHealth data={data} metrics={metrics} onGeneratePlan={onGeneratePlan} />
+
+      <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
+
       <div className="content-grid">
         <section className="surface">
           <SectionHeader title="销售漏斗" action="查看漏斗" onClick={onViewPipeline} />
           <PipelineStrip customers={data.customers} onPick={onPickCustomer} />
         </section>
         <section className="surface">
-          <SectionHeader title="AI 今日建议" icon={Sparkles} />
-          <InsightList customers={data.customers} activities={data.activities} tasks={data.tasks} />
+          <SectionHeader title="最近操作" icon={Sparkles} />
+          <ActivityLog logs={data.logs} />
         </section>
       </div>
     </section>
   );
 }
 
-function PipelineView({ customers, onPickCustomer }) {
+function ActivityLog({ logs = [] }) {
+  const visibleLogs = [...logs].slice(0, 5);
+  if (!visibleLogs.length) return <EmptyState text="暂无操作记录" />;
+
+  return (
+    <div className="activity-log">
+      {visibleLogs.map((log) => (
+        <article className="activity-log-row" key={log.id}>
+          <span>{log.type}</span>
+          <div>
+            <strong>{log.text}</strong>
+            <small>{String(log.createdAt || "").slice(0, 16).replace("T", " ")}</small>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function PriorityActions({ data, onPickCustomer, onToggleTask, onViewTasks }) {
+  const actions = data.tasks
+    .filter((task) => !task.done)
+    .sort(
+      (a, b) =>
+        priorityRank(a.priority) - priorityRank(b.priority) ||
+        String(a.dueDate).localeCompare(String(b.dueDate)),
+    )
+    .slice(0, 4);
+
+  return (
+    <section className="surface priority-actions">
+      <SectionHeader title="今日优先动作" action="查看待办" onClick={onViewTasks} />
+      <div className="priority-action-list">
+        {actions.map((task) => (
+          <article className={`priority-action task-priority-${task.priority}`} key={task.id}>
+            <span>{task.priority}</span>
+            <div>
+              <strong>{task.title}</strong>
+              <small>
+                {task.dueDate || "未设日期"} · {customerName(data.customers, task.customerId)}
+              </small>
+              <div className="priority-card-actions">
+                <button className="ghost-button" onClick={() => onToggleTask(task.id)} type="button">
+                  <Check size={15} />
+                  完成
+                </button>
+                <button className="ghost-button" onClick={() => onPickCustomer(task.customerId)} type="button">
+                  <ArrowRight size={15} />
+                  客户
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+        {actions.length === 0 && <EmptyState text="今天没有未完成动作" />}
+      </div>
+    </section>
+  );
+}
+
+function BusinessHealth({ data, metrics, onGeneratePlan }) {
+  const stageCount = new Set(data.customers.map((customer) => customer.stage)).size;
+  const customerText = data.customers
+    .map((customer) => `${customer.industry} ${customer.tags} ${customer.note}`)
+    .join(" ");
+  const checks = [
+    {
+      done: data.customers.length >= 5,
+      title: "客户样本充足",
+      detail: `${data.customers.length} 个客户，能体现销售池管理。`,
+    },
+    {
+      done: /SaaS|企业服务/i.test(customerText) && /工业|制造|自动化/.test(customerText) && /外贸|海外|询盘/.test(customerText),
+      title: "客户场景覆盖",
+      detail: "覆盖 SaaS、工业自动化、外贸三类客户场景。",
+    },
+    {
+      done: data.activities.length >= data.customers.length,
+      title: "跟进记录完整",
+      detail: `${data.activities.length} 条跟进，能说明沟通结论和下一步。`,
+    },
+    {
+      done: metrics.openTasks.length >= 4,
+      title: "行动闭环清晰",
+      detail: `${metrics.openTasks.length} 个未完成待办，体现销售推进节奏。`,
+    },
+    {
+      done: stageCount >= 4,
+      title: "销售阶段可讲",
+      detail: `${stageCount} 个阶段有客户，适合讲漏斗推进。`,
+    },
+  ];
+  const passed = checks.filter((item) => item.done).length;
+  const score = Math.round((passed / checks.length) * 100);
+
+  return (
+    <section className="surface self-check">
+      <div className="self-check-head">
+        <div>
+          <span className="eyebrow">运营体检</span>
+          <h3>客户池健康度</h3>
+          <p>系统自动检查客户、跟进、待办和阶段覆盖，帮助你判断今天该优先处理什么。</p>
+        </div>
+        <div className="health-actions">
+          <div className="readiness-score">
+            <strong>{score}</strong>
+            <span>健康度</span>
+          </div>
+          <button className="secondary-button" onClick={onGeneratePlan} type="button">
+            <Bell size={16} />
+            生成今日计划
+          </button>
+        </div>
+      </div>
+      <div className="readiness-track">
+        <span style={{ width: `${score}%` }} />
+      </div>
+      <div className="self-check-grid">
+        {checks.map((item) => (
+          <article className={item.done ? "check-card done" : "check-card"} key={item.title}>
+            {item.done ? <Check size={17} /> : <Circle size={17} />}
+            <div>
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BusinessGuide() {
+  return (
+    <section className="surface demo-guide">
+      <div>
+        <span className="eyebrow">工作台</span>
+        <h3>围绕客户、跟进和下一步管理销售节奏</h3>
+        <p>
+          每个客户都保留来源、阶段、金额、沟通记录和待办动作，方便每天快速判断机会进展和风险。
+        </p>
+      </div>
+      <div className="demo-points">
+        <article>
+          <strong>客户画像</strong>
+          <span>覆盖 SaaS、工业自动化、外贸制造三类客户场景。</span>
+        </article>
+        <article>
+          <strong>跟进节奏</strong>
+          <span>每次沟通都留下痛点、决策链、预算和下一步。</span>
+        </article>
+        <article>
+          <strong>行动闭环</strong>
+          <span>把报价、复盘、二次沟通变成待办提醒，避免销售动作断档。</span>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function PipelineView({ activities, customers, onPickCustomer, onStageChange, tasks }) {
   return (
     <section className="view">
       <div className="pipeline-board">
@@ -1030,20 +1871,44 @@ function PipelineView({ customers, onPickCustomer }) {
           const stageCustomers = customers.filter((customer) => customer.stage === stage.id);
           const stageAmount = stageCustomers.reduce((sum, customer) => sum + Number(customer.amount || 0), 0);
           return (
-            <section className="stage-column" key={stage.id}>
+            <section
+              className={`stage-column stage-tone-${stage.tone}`}
+              key={stage.id}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const customerId = event.dataTransfer.getData("text/customer-id");
+                if (customerId) onStageChange(customerId, stage.id);
+              }}
+            >
               <div className="stage-heading">
                 <span>{stage.id}</span>
                 <strong>{money(stageAmount)}</strong>
               </div>
               <div className="stage-list">
-                {stageCustomers.map((customer) => (
-                  <button className="deal-card" key={customer.id} onClick={() => onPickCustomer(customer.id)} type="button">
-                    <span className={`priority-dot priority-${customer.priority.toLowerCase()}`} />
-                    <strong>{customer.company}</strong>
-                    <small>{customer.contact || "未填联系人"} · {money(customer.amount)}</small>
-                    <em>{stage.probability}% 可能性</em>
-                  </button>
-                ))}
+                {stageCustomers.map((customer) => {
+                  const risk = customerRisk(customer, activities, tasks);
+                  return (
+                    <button
+                      className={`deal-card priority-card-${customer.priority.toLowerCase()} stage-tone-${stage.tone} risk-${risk.level}`}
+                      draggable
+                      key={customer.id}
+                      onClick={() => onPickCustomer(customer.id)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/customer-id", customer.id);
+                        event.dataTransfer.effectAllowed = "move";
+                      }}
+                      type="button"
+                    >
+                      <span className={`priority-dot priority-${customer.priority.toLowerCase()}`} />
+                      <span className={`priority-label priority-label-${customer.priority.toLowerCase()}`}>{customer.priority}类</span>
+                      <strong>{customer.company}</strong>
+                      <small>{customer.contact || "未填联系人"} · {money(customer.amount)}</small>
+                      <span className={`customer-risk-chip ${risk.level}`}>{risk.label}</span>
+                      <em>{stage.probability}% 可能性</em>
+                    </button>
+                  );
+                })}
                 {stageCustomers.length === 0 && <div className="empty-mini">暂无机会</div>}
               </div>
             </section>
@@ -1062,13 +1927,20 @@ function CustomersView({
   customers,
   data,
   onAnalyze,
+  onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
   onNewFollow,
   onPickCustomer,
+  priorityFilter,
+  riskFilter,
+  customerSort,
   searchText,
   selectedCustomerId,
+  setCustomerSort,
+  setPriorityFilter,
+  setRiskFilter,
   setSearchText,
   setStageFilter,
   stageFilter,
@@ -1095,24 +1967,47 @@ function CustomersView({
                 <option key={stage.id}>{stage.id}</option>
               ))}
             </select>
+            <select onChange={(event) => setPriorityFilter(event.target.value)} value={priorityFilter}>
+              <option>全部评级</option>
+              {PRIORITIES.map((priority) => (
+                <option key={priority}>{priority}类</option>
+              ))}
+            </select>
+            <select onChange={(event) => setRiskFilter(event.target.value)} value={riskFilter}>
+              {["全部风险", "高风险", "需动作", "健康"].map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+            <select onChange={(event) => setCustomerSort(event.target.value)} value={customerSort}>
+              {["风险优先", "评级优先", "金额高到低", "新建优先"].map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
           </div>
           <div className="customer-card-grid">
-            {customers.map((item) => (
-              <button
-                className={selectedCustomerId === item.id ? "mini-customer-card active" : "mini-customer-card"}
-                key={item.id}
-                onClick={() => onPickCustomer(item.id)}
-                type="button"
-              >
-                <span className={`priority-dot priority-${item.priority.toLowerCase()}`} />
-                <strong>{item.company}</strong>
-                <small>{item.contact || "未填联系人"} · {item.industry || "未填行业"}</small>
-                <span className="mini-card-footer">
-                  <StageBadge stage={item.stage} compact />
-                  <em>{money(item.amount)}</em>
-                </span>
-              </button>
-            ))}
+            {customers.map((item) => {
+              const risk = customerRisk(item, data.activities, data.tasks);
+              return (
+                <button
+                  className={`mini-customer-card priority-card-${item.priority.toLowerCase()} stage-tone-${stageMeta(item.stage).tone} risk-${risk.level}${
+                    selectedCustomerId === item.id ? " active" : ""
+                  }`}
+                  key={item.id}
+                  onClick={() => onPickCustomer(item.id)}
+                  type="button"
+                >
+                  <span className={`priority-dot priority-${item.priority.toLowerCase()}`} />
+                  <span className={`priority-label priority-label-${item.priority.toLowerCase()}`}>{item.priority}类</span>
+                  <strong>{item.company}</strong>
+                  <small>{item.contact || "未填联系人"} · {item.industry || "未填行业"}</small>
+                  <span className={`customer-risk-chip ${risk.level}`}>{risk.label}</span>
+                  <span className="mini-card-footer">
+                    <StageBadge stage={item.stage} compact />
+                    <em>{money(item.amount)}</em>
+                  </span>
+                </button>
+              );
+            })}
             {customers.length === 0 && <EmptyState text="没有匹配的客户" />}
           </div>
         </section>
@@ -1126,6 +2021,7 @@ function CustomersView({
               customer={customer}
               customers={data.customers}
               onAnalyze={onAnalyze}
+              onCreateTask={onCreateTask}
               onDelete={onDelete}
               onEdit={onEdit}
               onFieldChange={onFieldChange}
@@ -1137,6 +2033,517 @@ function CustomersView({
           )}
         </section>
       </div>
+    </section>
+  );
+}
+
+function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, onStageChange, tasks }) {
+  const [activeSource, setActiveSource] = useState("全部来源");
+  const [activeStatus, setActiveStatus] = useState("全部");
+  const [selectedLeadId, setSelectedLeadId] = useState(customers[0]?.id || "");
+  const duplicates = duplicateCustomers(customers);
+  const sourceStats = sourceSummary(customers);
+  const leadItems = customers
+    .map((customer) => ({
+      customer,
+      risk: customerRisk(customer, activities, tasks),
+      score: leadScore(customer, activities, tasks),
+    }))
+    .sort(
+      (a, b) =>
+        riskRank(a.risk.level) - riskRank(b.risk.level) ||
+        customerPriorityRank(a.customer.priority) - customerPriorityRank(b.customer.priority),
+    );
+  const filteredLeadItems = leadItems.filter(({ customer, risk }) => {
+    const sourceOk = activeSource === "全部来源" || (customer.source || "未填写来源") === activeSource;
+    const statusOk =
+      activeStatus === "全部" ||
+      (activeStatus === "高风险" && risk.level === "risk") ||
+      (activeStatus === "需动作" && risk.level === "watch") ||
+      (activeStatus === "A类" && customer.priority === "A") ||
+      (activeStatus === "D类" && customer.priority === "D");
+    return sourceOk && statusOk;
+  });
+  const selectedLead =
+    leadItems.find(({ customer }) => customer.id === selectedLeadId) ||
+    filteredLeadItems[0] ||
+    leadItems[0];
+  const selectedCustomer = selectedLead?.customer;
+  const selectedRisk = selectedLead?.risk;
+  const selectedScore = selectedLead?.score || 0;
+  const sourceTotal = sourceStats.reduce((sum, item) => sum + item.count, 0);
+
+  return (
+    <section className="view">
+      <div className="content-grid">
+        <section className="surface">
+          <div className="panel-heading">
+            <div>
+              <h3>来源质量</h3>
+              <p>点来源可以筛选线索池。</p>
+            </div>
+            <Target size={18} />
+          </div>
+          <div className="source-grid">
+            <button
+              className={activeSource === "全部来源" ? "source-card active" : "source-card"}
+              onClick={() => setActiveSource("全部来源")}
+              type="button"
+            >
+              <small>全部来源</small>
+              <strong>{sourceTotal} 个客户</strong>
+              <span>查看完整线索池</span>
+            </button>
+            {sourceStats.map((item) => (
+              <button
+                className={activeSource === item.source ? "source-card active" : "source-card"}
+                key={item.source}
+                onClick={() => setActiveSource(item.source)}
+                type="button"
+              >
+                <small>{item.source}</small>
+                <strong>{item.count} 个客户</strong>
+                <span>{money(item.amount)} 管道金额</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="surface">
+          <SectionHeader title="撞单检查" icon={ShieldCheck} />
+          <div className="duplicate-list">
+            {duplicates.map((group) => (
+              <article className="duplicate-card" key={group.key}>
+                <strong>{group.label}</strong>
+                <span>{group.items.map((item) => item.company).join(" / ")}</span>
+              </article>
+            ))}
+            {duplicates.length === 0 && <EmptyState text="目前没有明显重复客户" />}
+          </div>
+        </section>
+      </div>
+
+      <section className="surface">
+        <div className="panel-heading">
+          <div>
+            <h3>线索工作台</h3>
+            <p>先筛选，再点线索查看建议动作。</p>
+          </div>
+          <div className="segmented lead-filter">
+            {["全部", "高风险", "需动作", "A类", "D类"].map((item) => (
+              <button className={activeStatus === item ? "active" : ""} key={item} onClick={() => setActiveStatus(item)} type="button">
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="lead-workbench">
+          <div className="activation-list">
+            {filteredLeadItems.map(({ customer, risk, score }) => (
+              <button
+                className={`activation-row priority-card-${customer.priority.toLowerCase()} risk-${risk.level}${selectedCustomer?.id === customer.id ? " active" : ""}`}
+                key={customer.id}
+                onClick={() => setSelectedLeadId(customer.id)}
+                type="button"
+              >
+                <span className={`priority-label priority-label-${customer.priority.toLowerCase()}`}>{customer.priority}类</span>
+                <div>
+                  <strong>{customer.company}</strong>
+                  <small>{risk.reason}</small>
+                </div>
+                <em>{score}</em>
+              </button>
+            ))}
+            {filteredLeadItems.length === 0 && <EmptyState text="当前筛选下没有线索" />}
+          </div>
+
+          <aside className="lead-detail-card">
+            {selectedCustomer ? (
+              <>
+                <div className="lead-score">
+                  <span>线索分</span>
+                  <strong>{selectedScore}</strong>
+                  <small>{selectedRisk.label}</small>
+                </div>
+                <div className="lead-detail-main">
+                  <StageBadge stage={selectedCustomer.stage} />
+                  <h3>{selectedCustomer.company}</h3>
+                  <p>{selectedCustomer.contact || "未填联系人"} · {selectedCustomer.source || "未填写来源"}</p>
+                </div>
+                <div className="lead-suggestion">
+                  <strong>{leadActionTitle(selectedCustomer, selectedRisk)}</strong>
+                  <span>{leadActionBody(selectedCustomer, selectedRisk)}</span>
+                </div>
+                <div className="lead-stage-picker">
+                  <label>
+                    快速改阶段
+                    <select onChange={(event) => onStageChange(selectedCustomer.id, event.target.value)} value={selectedCustomer.stage}>
+                      {STAGES.map((stage) => (
+                        <option key={stage.id}>{stage.id}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="lead-actions">
+                  <button className="primary-button" onClick={() => onCreateTask(selectedCustomer.id)} type="button">
+                    <Bell size={17} />
+                    生成待办
+                  </button>
+                  <button className="secondary-button" onClick={() => onPickCustomer(selectedCustomer.id)} type="button">
+                    <ArrowRight size={17} />
+                    客户详情
+                  </button>
+                </div>
+              </>
+            ) : (
+              <EmptyState text="请选择一个线索" />
+            )}
+          </aside>
+        </div>
+      </section>
+    </section>
+  );
+}
+function ContractsView({ contractForm, contracts, customers, onChange, onContractChange, onDelete, onMarkPaid, onSave }) {
+  const [showContractForm, setShowContractForm] = useState(false);
+  const sortedContracts = [...contracts].sort((a, b) => String(a.paymentDue || "").localeCompare(String(b.paymentDue || "")));
+  const receivable = contracts.reduce(
+    (sum, contract) => sum + Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0)),
+    0,
+  );
+  const overdue = contracts.filter((contract) => contract.paymentDue && contract.paymentDue < todayInputValue() && contract.status !== "已回款");
+  const submitContract = (event) => {
+    onSave(event);
+    if (contractForm.title.trim()) setShowContractForm(false);
+  };
+
+  return (
+    <section className="view">
+      <div className="metrics-grid">
+        <Metric title="合同数量" value={contracts.length} detail="已记录合同/报价" />
+        <Metric title="应收余额" value={money(receivable)} detail="合同金额减已回款" />
+        <Metric title="逾期回款" value={overdue.length} detail="需要今天处理" />
+        <Metric title="已回款合同" value={contracts.filter((contract) => contract.status === "已回款").length} detail="完成收款闭环" />
+      </div>
+
+      <section className="surface">
+        <div className="panel-heading">
+          <h3>回款清单</h3>
+          <button className="primary-button" onClick={() => setShowContractForm(true)} type="button">
+            <Plus size={17} />
+            新增合同
+          </button>
+        </div>
+        <div className="contract-list">
+          {sortedContracts.map((contract) => {
+            const balance = Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0));
+            const isOverdue = contract.paymentDue && contract.paymentDue < todayInputValue() && contract.status !== "已回款";
+            return (
+              <article className={isOverdue ? "contract-card overdue" : "contract-card"} key={contract.id}>
+                <div>
+                  <span className="contract-status">{contract.status}</span>
+                  <strong>{contract.title}</strong>
+                  <small>{customerName(customers, contract.customerId)} · {contract.contractNo || "未填编号"}</small>
+                </div>
+                <div className="contract-money">
+                  <strong>{money(balance)}</strong>
+                  <small>待回款 / {contract.paymentDue || "未设日期"}</small>
+                </div>
+                <div className="contract-inline-actions">
+                  <select onChange={(event) => onContractChange(contract.id, { status: event.target.value })} value={contract.status}>
+                    {CONTRACT_STATUS.map((status) => (
+                      <option key={status}>{status}</option>
+                    ))}
+                  </select>
+                  <button className="secondary-button" onClick={() => onMarkPaid(contract.id)} type="button">
+                    <Check size={16} />
+                    已回款
+                  </button>
+                </div>
+                <button className="icon-button danger" onClick={() => onDelete(contract.id)} title="删除合同" type="button">
+                  <Trash2 size={17} />
+                </button>
+              </article>
+            );
+          })}
+          {sortedContracts.length === 0 && (
+            <div className="empty-action">
+              <strong>还没有合同或回款记录</strong>
+              <button className="secondary-button" onClick={() => setShowContractForm(true)} type="button">
+                <Plus size={17} />
+                新增第一条合同
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {showContractForm && (
+        <div className="drawer-backdrop">
+          <section className="drawer">
+            <div className="panel-heading">
+              <h3>新增合同/回款</h3>
+              <button className="icon-button" onClick={() => setShowContractForm(false)} title="关闭" type="button">
+                <X size={18} />
+              </button>
+            </div>
+            <form className="form-grid" onSubmit={submitContract}>
+              <label>
+                关联客户
+                <select onChange={(event) => onChange({ ...contractForm, customerId: event.target.value })} value={contractForm.customerId}>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.company}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <TextField label="合同/报价名称" required value={contractForm.title} onChange={(title) => onChange({ ...contractForm, title })} />
+              <TextField label="合同编号" value={contractForm.contractNo} onChange={(contractNo) => onChange({ ...contractForm, contractNo })} />
+              <TextField label="合同金额" value={contractForm.amount} onChange={(amount) => onChange({ ...contractForm, amount })} />
+              <TextField label="已回款" value={contractForm.paidAmount} onChange={(paidAmount) => onChange({ ...contractForm, paidAmount })} />
+              <label>
+                状态
+                <select onChange={(event) => onChange({ ...contractForm, status: event.target.value })} value={contractForm.status}>
+                  {CONTRACT_STATUS.map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                签约日期
+                <input onChange={(event) => onChange({ ...contractForm, signDate: event.target.value })} type="date" value={contractForm.signDate} />
+              </label>
+              <label>
+                回款提醒
+                <input onChange={(event) => onChange({ ...contractForm, paymentDue: event.target.value })} type="date" value={contractForm.paymentDue} />
+              </label>
+              <label className="wide">
+                备注
+                <textarea onChange={(event) => onChange({ ...contractForm, note: event.target.value })} rows="3" value={contractForm.note} />
+              </label>
+              <div className="form-actions">
+                <button className="secondary-button" onClick={() => setShowContractForm(false)} type="button">
+                  <X size={18} />
+                  取消
+                </button>
+                <button className="primary-button" type="submit">
+                  <Save size={18} />
+                  保存合同
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PlaybookView() {
+  const [callText, setCallText] = useState("");
+  const [callScenario, setCallScenario] = useState("需求确认");
+  const [reviewDraft, setReviewDraft] = useState(loadReviewDraft);
+  const [toolTab, setToolTab] = useState("对话诊断");
+  const diagnosis = useMemo(() => buildSalesCallDiagnosis(callText, callScenario), [callText, callScenario]);
+  const spinCards = [
+    {
+      title: "S 情况问题",
+      body: "先弄清客户现状，不急着讲产品。",
+      examples: ["现在客户线索从哪里来？", "报价后谁负责继续跟？", "你们现在用什么方式记录客户？"],
+    },
+    {
+      title: "P 问题问题",
+      body: "找出当前流程里真实不舒服的地方。",
+      examples: ["现在最容易丢单的是哪个环节？", "新人跟进不稳定会带来什么问题？", "主管最难看到哪些过程？"],
+    },
+    {
+      title: "I 影响问题",
+      body: "把问题放大到成本、效率、风险和老板关注点。",
+      examples: ["如果报价后 3 天没人跟，会影响多少订单？", "销售过程不可见，会让管理成本增加在哪里？"],
+    },
+    {
+      title: "N 回报问题",
+      body: "让客户自己说出解决后的价值。",
+      examples: ["如果自动提醒能减少漏跟，你最想先改善哪个团队？", "如果下周试点，你希望看到哪 3 个指标？"],
+    },
+  ];
+  const skillCards = [
+    { title: "销售录音诊断", body: "从录音转写里检查开场、需求挖掘、价值传递、异议处理和成交推动。" },
+    { title: "客户画像", body: "整理关键人角色、决策权重、预算信号、核心痛点和潜在诉求。" },
+    { title: "拜访纪要", body: "把聊天记录或会议内容整理为结论、决议项、待澄清问题和下一步动作。" },
+    { title: "需求提炼", body: "区分显性需求、隐性需求、未满足需求，避免只记录客户表面说法。" },
+    { title: "商务风险", body: "识别长账期、过度承诺、竞品介入、交付范围不清和回款风险。" },
+    { title: "客户归档", body: "把本次沟通沉淀为 CRM 更新项：痛点、决策链、阶段、待办和风险。" },
+  ];
+
+  function updateReviewDraft(field, value) {
+    const nextDraft = { ...reviewDraft, [field]: value };
+    setReviewDraft(nextDraft);
+    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
+  }
+
+  function clearReviewDraft() {
+    const nextDraft = emptyReviewDraft();
+    setReviewDraft(nextDraft);
+    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
+  }
+
+  function writeDiagnosisToReview() {
+    const weakItems = diagnosis.items.filter((item) => !item.hit).map((item) => `${item.title}：${item.text}`);
+    const strongItems = diagnosis.items.filter((item) => item.hit).map((item) => item.title);
+    const nextDraft = {
+      conclusion: `${callScenario}诊断分 ${diagnosis.score}，${diagnosis.level}。`,
+      blocker: weakItems.length ? weakItems.join("\n") : "本次沟通主要动作完整，下一步重点是持续推进客户承诺。",
+      nextStep: "把未完成项拆成待办，并在下次沟通前补齐。",
+      ability: strongItems.length ? `做得较好：${strongItems.join("、")}。` : "需要先补齐开场目标、需求挖掘、价值传递和下一步动作。",
+    };
+    setReviewDraft(nextDraft);
+    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
+  }
+
+  return (
+    <section className="view">
+      <div className="segmented tool-tabs">
+        {["对话诊断", "销售方法论"].map((tab) => (
+          <button className={toolTab === tab ? "active" : ""} key={tab} onClick={() => setToolTab(tab)} type="button">
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {toolTab === "对话诊断" && (
+        <>
+          <section className="surface call-analyzer">
+            <div className="panel-heading">
+              <div>
+                <h3>销售录音复盘</h3>
+                <p>粘贴 WorkBuddy、微信或会议软件的录音转写文本，系统按销售诊断框架给出问题和下一步。</p>
+              </div>
+              <Brain size={18} />
+            </div>
+            <div className="call-analyzer-grid">
+              <div className="call-input-panel">
+                <label>
+                  沟通场景
+                  <select onChange={(event) => setCallScenario(event.target.value)} value={callScenario}>
+                    {["初次接触", "需求确认", "方案报价", "商务谈判", "签约推进", "客户回访"].map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  录音转写 / 会议纪要
+                  <textarea
+                    onChange={(event) => setCallText(event.target.value)}
+                    placeholder="把销售和客户的对话粘贴到这里。例如：客户说现在报价后经常没人跟，老板想看销售过程；你问了预算，但没有确认谁拍板..."
+                    rows="10"
+                    value={callText}
+                  />
+                </label>
+              </div>
+              <div className="diagnosis-panel">
+                <div className="diagnosis-score">
+                  <span>诊断分</span>
+                  <strong>{diagnosis.score}</strong>
+                  <small>{diagnosis.level}</small>
+                </div>
+                <button className="secondary-button" disabled={!callText.trim()} onClick={writeDiagnosisToReview} type="button">
+                  <Save size={16} />
+                  写入复盘
+                </button>
+                <div className="diagnosis-list">
+                  {diagnosis.items.map((item) => (
+                    <article className={item.hit ? "diagnosis-item hit" : "diagnosis-item"} key={item.title}>
+                      <strong>{item.title}</strong>
+                      <span>{item.text}</span>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="surface">
+            <div className="panel-heading">
+              <h3>销售复盘</h3>
+              <button className="ghost-button" onClick={clearReviewDraft} type="button">
+                <X size={16} />
+                清空
+              </button>
+            </div>
+            <div className="review-form">
+              <label>
+                本次沟通结论
+                <textarea
+                  onChange={(event) => updateReviewDraft("conclusion", event.target.value)}
+                  placeholder="客户现在最在意什么？本次聊清楚了什么？"
+                  rows="3"
+                  value={reviewDraft.conclusion}
+                />
+              </label>
+              <label>
+                推进阻力
+                <textarea
+                  onChange={(event) => updateReviewDraft("blocker", event.target.value)}
+                  placeholder="预算、时机、竞品、决策链，哪一项卡住？"
+                  rows="3"
+                  value={reviewDraft.blocker}
+                />
+              </label>
+              <label>
+                下一步动作
+                <textarea
+                  onChange={(event) => updateReviewDraft("nextStep", event.target.value)}
+                  placeholder="谁、什么时间、完成什么材料或确认什么问题？"
+                  rows="3"
+                  value={reviewDraft.nextStep}
+                />
+              </label>
+              <label>
+                能力复盘
+                <textarea
+                  onChange={(event) => updateReviewDraft("ability", event.target.value)}
+                  placeholder="开场、需求挖掘、价值传递、异议处理、成交推动，各扣分在哪里？"
+                  rows="3"
+                  value={reviewDraft.ability}
+                />
+              </label>
+            </div>
+          </section>
+        </>
+      )}
+
+      {toolTab === "销售方法论" && (
+        <>
+          <section className="surface">
+            <SectionHeader title="SPIN 销售法" icon={Target} />
+            <div className="spin-grid">
+              {spinCards.map((item) => (
+                <article className="spin-card" key={item.title}>
+                  <strong>{item.title}</strong>
+                  <p>{item.body}</p>
+                  {item.examples.map((example) => (
+                    <span key={example}>{example}</span>
+                  ))}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="surface">
+            <SectionHeader title="Sales Skill 能力库" icon={BookOpen} />
+            <div className="playbook-grid">
+              {skillCards.map((item) => (
+                <article className="playbook-card" key={item.title}>
+                  <strong>{item.title}</strong>
+                  <p>{item.body}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </section>
   );
 }
@@ -1161,6 +2568,26 @@ function FollowupsView({
               <WandSparkles size={16} />
               AI建议
             </button>
+          </div>
+          <div className="template-actions">
+            {FOLLOWUP_TEMPLATES.map((template) => (
+              <button
+                className="template-button"
+                key={template.label}
+                onClick={() =>
+                  onChange({
+                    ...activityForm,
+                    method: template.method,
+                    content: template.content,
+                    nextStep: template.nextStep,
+                  })
+                }
+                type="button"
+              >
+                <ClipboardList size={15} />
+                {template.label}
+              </button>
+            ))}
           </div>
           <form className="form-grid single" onSubmit={onSave}>
             <label>
@@ -1221,6 +2648,34 @@ function FollowupsView({
                 value={activityForm.nextStep}
               />
             </label>
+            <label className="switch-row compact wide">
+              <span>同步生成待办</span>
+              <input
+                checked={activityForm.makeTask}
+                onChange={(event) => onChange({ ...activityForm, makeTask: event.target.checked })}
+                type="checkbox"
+              />
+            </label>
+            {activityForm.makeTask && (
+              <>
+                <label>
+                  待办日期
+                  <input
+                    onChange={(event) => onChange({ ...activityForm, taskDueDate: event.target.value })}
+                    type="date"
+                    value={activityForm.taskDueDate}
+                  />
+                </label>
+                <label>
+                  待办优先级
+                  <select onChange={(event) => onChange({ ...activityForm, taskPriority: event.target.value })} value={activityForm.taskPriority}>
+                    {TASK_PRIORITIES.map((priority) => (
+                      <option key={priority}>{priority}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
             <div className="form-actions">
               <button className="primary-button" type="submit">
                 <Save size={18} />
@@ -1303,7 +2758,7 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
           <div className="panel-heading">
             <h3>待办列表</h3>
             <div className="segmented">
-              {["未完成", "已完成", "全部"].map((item) => (
+              {["未完成", "今日", "超期", "高优先级", "已完成", "全部"].map((item) => (
                 <button className={todoFilter === item ? "active" : ""} key={item} onClick={() => setTodoFilter(item)} type="button">
                   {item}
                 </button>
@@ -1312,9 +2767,10 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
           </div>
           <div className="task-list">
             {visibleTasks.map((task) => (
-              <div className={task.done ? "task-row done" : "task-row"} key={task.id}>
+              <div className={`task-row task-priority-${task.priority}${task.done ? " done" : ""}`} key={task.id}>
                 <button className="check-button" onClick={() => onToggle(task.id)} title={task.done ? "标记未完成" : "标记完成"} type="button">
                   {task.done ? <Check size={17} /> : <Circle size={17} />}
+                  <span>{task.done ? "已完成" : "完成"}</span>
                 </button>
                 <div>
                   <strong>{task.title}</strong>
@@ -1336,8 +2792,14 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
 }
 
 function SettingsView({
+  backupStatus,
   data,
   onChangePassword,
+  onExportBackup,
+  onExportCustomersCsv,
+  onExportTasksCsv,
+  onImportBackup,
+  onImportCustomersCsv,
   onPasswordChange,
   onProfileChange,
   onSaveProfile,
@@ -1449,10 +2911,66 @@ function SettingsView({
             <Info label="客户" value={data.customers.length} />
             <Info label="跟进" value={data.activities.length} />
             <Info label="待办" value={data.tasks.length} />
+            <Info label="合同" value={data.contracts.length} />
             <Info label="AI模式" value={data.settings.aiMode} />
           </div>
         </section>
       </div>
+
+      <section className="surface">
+        <div className="panel-heading">
+          <div>
+            <h3>备份与迁移</h3>
+            <p>国内静态版没有云同步。换手机或换浏览器前可导出一份备份，再导入恢复。</p>
+          </div>
+          <ShieldCheck size={18} />
+        </div>
+        <div className="backup-panel">
+          <article>
+            <strong>导出备份</strong>
+            <span>生成 JSON 文件，里面包含客户、跟进、待办和设置。</span>
+            <button className="secondary-button" onClick={onExportBackup} type="button">
+              <Download size={17} />
+              导出数据
+            </button>
+          </article>
+          <article>
+            <strong>导出客户表</strong>
+            <span>导出 CSV，适合放进 Excel 做筛选、排序和日报整理。</span>
+            <button className="secondary-button" onClick={onExportCustomersCsv} type="button">
+              <Download size={17} />
+              客户CSV
+            </button>
+          </article>
+          <article>
+            <strong>导出待办表</strong>
+            <span>导出未完成和已完成动作，方便复盘今天做了什么。</span>
+            <button className="secondary-button" onClick={onExportTasksCsv} type="button">
+              <Download size={17} />
+              待办CSV
+            </button>
+          </article>
+          <article>
+            <strong>导入客户表</strong>
+            <span>从 CSV 追加客户，适合导入展会名单、渠道表和整理好的客户清单。</span>
+            <label className="secondary-button file-button">
+              <Upload size={17} />
+              导入客户CSV
+              <input accept=".csv,text/csv" onChange={onImportCustomersCsv} type="file" />
+            </label>
+          </article>
+          <article>
+            <strong>导入备份</strong>
+            <span>在新设备打开国内链接后导入，会先确认再覆盖当前浏览器数据。</span>
+            <label className="secondary-button file-button">
+              <Upload size={17} />
+              导入数据
+              <input accept="application/json,.json" onChange={onImportBackup} type="file" />
+            </label>
+          </article>
+        </div>
+        {backupStatus && <div className="backup-status">{backupStatus}</div>}
+      </section>
     </section>
   );
 }
@@ -1465,9 +2983,15 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
           <div className="brand-mark">LJ</div>
           <div>
             <h1>tob廖俊嘉</h1>
-            <p>登录后，手机和电脑使用同一份客户数据。</p>
+            <p>本机保存客户、跟进和待办，打开即可使用。</p>
           </div>
         </div>
+        {STATIC_LOCAL_MODE && (
+          <div className="local-mode-note">
+            <ShieldCheck size={16} />
+            <span>国内静态模式：不用 VPN，不连接国外数据库，登录和数据都保存在当前浏览器。</span>
+          </div>
+        )}
         <div className="auth-tabs">
           <button className={authMode === "login" ? "active" : ""} onClick={() => onModeChange("login")} type="button">
             登录
@@ -1563,7 +3087,12 @@ function PipelineStrip({ customers, onPick }) {
       {STAGES.slice(0, 6).map((stage) => {
         const stageCustomers = customers.filter((customer) => customer.stage === stage.id);
         return (
-          <button className="pipeline-step" key={stage.id} onClick={() => stageCustomers[0] && onPick(stageCustomers[0].id)} type="button">
+            <button
+              className={`pipeline-step stage-tone-${stage.tone}`}
+              key={stage.id}
+              onClick={() => stageCustomers[0] && onPick(stageCustomers[0].id)}
+              type="button"
+            >
             <span>{stage.id}</span>
             <strong>{stageCustomers.length}</strong>
             <em>{stage.probability}%</em>
@@ -1602,14 +3131,17 @@ function CustomerDetail({
   customer,
   customers,
   onAnalyze,
+  onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
   onNewFollow,
   tasks,
 }) {
+  const [detailTab, setDetailTab] = useState("基本信息");
   const risk = customerRisk(customer, activities, tasks);
   const recommendation = nextBestAction(customer, activities, tasks);
+  const completeness = customerCompleteness(customer);
 
   return (
     <>
@@ -1629,31 +3161,64 @@ function CustomerDetail({
         </div>
       </div>
 
-      <div className="quick-controls">
-        <label>
-          阶段
-          <select onChange={(event) => onFieldChange(customer.id, "stage", event.target.value)} value={customer.stage}>
-            {STAGES.map((stage) => (
-              <option key={stage.id}>{stage.id}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          评级
-          <select onChange={(event) => onFieldChange(customer.id, "priority", event.target.value)} value={customer.priority}>
-            {PRIORITIES.map((priority) => (
-              <option key={priority}>{priority}</option>
-            ))}
-          </select>
-        </label>
+      <div className="segmented detail-tabs">
+        {["基本信息", "商机详情", "跟进动态"].map((tab) => (
+          <button className={detailTab === tab ? "active" : ""} key={tab} onClick={() => setDetailTab(tab)} type="button">
+            {tab}
+          </button>
+        ))}
       </div>
 
-      <div className="detail-grid">
-        <Info label="预计金额" value={money(customer.amount)} />
-        <Info label="成交预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
-        <Info label="来源" value={customer.source || "未填写"} />
-        <Info label="预计成交" value={customer.closeDate || "未设置"} />
-      </div>
+      {detailTab === "基本信息" && (
+        <>
+          <div className="completeness-card">
+            <div>
+              <span>档案完整度</span>
+              <strong>{completeness.score}%</strong>
+              <small>{completeness.missing.length ? `缺：${completeness.missing.join("、")}` : "关键资料已完整"}</small>
+            </div>
+            <button className="secondary-button" onClick={() => onEdit(customer)} type="button">
+              <Edit3 size={16} />
+              补全
+            </button>
+          </div>
+          <div className="quick-controls">
+            <label>
+              阶段
+              <select onChange={(event) => onFieldChange(customer.id, "stage", event.target.value)} value={customer.stage}>
+                {STAGES.map((stage) => (
+                  <option key={stage.id}>{stage.id}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              评级
+              <select onChange={(event) => onFieldChange(customer.id, "priority", event.target.value)} value={customer.priority}>
+                {PRIORITIES.map((priority) => (
+                  <option key={priority}>{priority}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="detail-grid compact-detail-grid">
+            <Info label="来源" value={customer.source || "未填写"} />
+            <Info label="建档日期" value={customer.recordedAt || "未记录"} />
+            <Info label="客户评级" value={`${customer.priority}类`} />
+            <Info label="联系方式" value={customer.phone || "未填写"} />
+          </div>
+        </>
+      )}
+
+      {detailTab === "商机详情" && (
+        <div className="detail-grid">
+          <Info label="预计金额" value={money(customer.amount)} />
+          <Info label="成交预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
+          <Info label="核心痛点" value={customer.painPoint || "未填写"} />
+          <Info label="决策链" value={customer.decisionMaker || "未填写"} />
+          <Info label="竞品/替代方案" value={customer.competitor || "未填写"} />
+          <Info label="标签" value={customer.tags || "暂无标签"} />
+        </div>
+      )}
 
       <div className={`advice-box ${risk.level}`}>
         <Sparkles size={18} />
@@ -1672,21 +3237,22 @@ function CustomerDetail({
           <Plus size={16} />
           记录跟进
         </button>
+        <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
+          <Bell size={16} />
+          生成待办
+        </button>
       </div>
 
       {aiInsight && <AiInsight insight={aiInsight} />}
 
-      <div className="note-box">
-        <strong>标签</strong>
-        <p>{customer.tags || "暂无标签"}</p>
-        <strong>备注</strong>
-        <p>{customer.note || "暂无备注"}</p>
-      </div>
+      {detailTab === "基本信息" && (
+        <div className="note-box">
+          <strong>备注</strong>
+          <p>{customer.note || "暂无备注"}</p>
+        </div>
+      )}
 
-      <div className="section-title">
-        <h4>跟进记录</h4>
-      </div>
-      <Timeline activities={activities} customers={customers} />
+      {detailTab === "跟进动态" && <Timeline activities={activities} customers={customers} />}
     </>
   );
 }
@@ -1763,9 +3329,12 @@ function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
           <TextField label="预计金额" value={customerForm.amount} onChange={(amount) => onChange({ ...customerForm, amount })} />
           <TextField label="来源" value={customerForm.source} onChange={(source) => onChange({ ...customerForm, source })} />
           <label>
-            预计成交日期
-            <input onChange={(event) => onChange({ ...customerForm, closeDate: event.target.value })} type="date" value={customerForm.closeDate} />
+            建档日期
+            <input onChange={(event) => onChange({ ...customerForm, recordedAt: event.target.value })} type="date" value={customerForm.recordedAt} />
           </label>
+          <TextField label="核心痛点" value={customerForm.painPoint} onChange={(painPoint) => onChange({ ...customerForm, painPoint })} />
+          <TextField label="决策链" value={customerForm.decisionMaker} onChange={(decisionMaker) => onChange({ ...customerForm, decisionMaker })} />
+          <TextField label="竞品/替代方案" value={customerForm.competitor} onChange={(competitor) => onChange({ ...customerForm, competitor })} />
           <TextField label="标签" value={customerForm.tags} onChange={(tags) => onChange({ ...customerForm, tags })} />
           <label className="wide">
             备注
@@ -1799,7 +3368,7 @@ function TextField({ label, onChange, required = false, value }) {
 function StageBadge({ compact = false, stage }) {
   const meta = stageMeta(stage);
   return (
-    <span className={compact ? "stage-badge compact" : "stage-badge"}>
+    <span className={`${compact ? "stage-badge compact" : "stage-badge"} stage-tone-${meta.tone}`}>
       {stage}
       <em>{meta.probability}%</em>
     </span>
@@ -1846,25 +3415,35 @@ function viewTitle(view) {
     dashboard: "销售驾驶舱",
     pipeline: "机会漏斗",
     customers: "客户资产",
+    leads: "线索池",
     followups: "跟进记录",
     tasks: "待办提醒",
+    contracts: "合同回款",
+    playbook: "销售工具",
     settings: "设置与个人中心",
   }[view];
 }
 
 function viewSubtitle(view) {
   return {
-    dashboard: "每天先看重点、风险和下一步。",
+    dashboard: "先看客户质量、销售风险和今天该做什么。",
     pipeline: "按阶段管理机会，估算成交概率。",
-    customers: "客户用小卡片快速浏览，点开看完整详情。",
-    followups: "每次沟通都留下下一步，AI 帮你补动作。",
-    tasks: "把销售动作变成可执行提醒。",
+    customers: "看客户画像、痛点、预算、阶段和最近跟进。",
+    leads: "检查来源质量、重复客户和待激活机会。",
+    followups: "每次沟通都留下结论和下一步动作。",
+    tasks: "把报价、复盘、二次沟通变成可执行提醒。",
+    contracts: "记录合同金额、回款节点和逾期风险。",
+    playbook: "用录音转写做诊断，结合 SPIN 和 Sales Skill 提升每次沟通质量。",
     settings: "账号、密码、提醒和数据偏好都在这里。",
   }[view];
 }
 
 function priorityRank(priority) {
   return { 高: 0, 中: 1, 低: 2 }[priority] ?? 3;
+}
+
+function customerPriorityRank(priority) {
+  return { A: 0, B: 1, C: 2, D: 3 }[priority] ?? 4;
 }
 
 function riskRank(level) {
@@ -1887,10 +3466,146 @@ function customerRisk(customer, activities, tasks) {
   if (customer.priority === "A" && !openTasks.length && customer.stage !== "已成交") {
     return { level: "watch", label: "需动作", reason: "A 类客户没有下一步待办。" };
   }
-  if (customer.closeDate && customer.closeDate < today && customer.stage !== "已成交") {
-    return { level: "watch", label: "需复盘", reason: "预计成交日期已过，需要更新判断。" };
+  if (customer.priority === "D" && customer.stage !== "已成交") {
+    return { level: "watch", label: "待激活", reason: "D 类客户需要判断是否继续投入时间。" };
   }
   return { level: "good", label: "健康", reason: latestActivity ? `最近跟进：${latestActivity.date}` : "等待首次沟通。" };
+}
+
+function duplicateCustomers(customers) {
+  const groups = new Map();
+  customers.forEach((customer) => {
+    [
+      { key: normalizeDuplicateKey(customer.phone), label: `联系方式：${customer.phone}` },
+      { key: normalizeDuplicateKey(customer.company), label: `公司名：${customer.company}` },
+    ].forEach((item) => {
+      if (!item.key) return;
+      if (!groups.has(item.key)) groups.set(item.key, { key: item.key, label: item.label, items: [] });
+      groups.get(item.key).items.push(customer);
+    });
+  });
+  return [...groups.values()].filter((group) => group.items.length > 1);
+}
+
+function normalizeDuplicateKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s|-/g, "")
+    .trim();
+}
+
+function sourceSummary(customers) {
+  const groups = new Map();
+  customers.forEach((customer) => {
+    const source = customer.source || "未填写来源";
+    const current = groups.get(source) || { source, count: 0, amount: 0 };
+    current.count += 1;
+    current.amount += Number(customer.amount || 0);
+    groups.set(source, current);
+  });
+  return [...groups.values()].sort((a, b) => b.amount - a.amount);
+}
+
+function customerCompleteness(customer = {}) {
+  const fields = [
+    { key: "phone", label: "联系方式" },
+    { key: "amount", label: "金额" },
+    { key: "source", label: "来源" },
+    { key: "painPoint", label: "痛点" },
+    { key: "decisionMaker", label: "决策链" },
+    { key: "competitor", label: "竞品" },
+  ];
+  const missing = fields.filter((field) => !String(customer[field.key] || "").trim()).map((field) => field.label);
+  const score = Math.round(((fields.length - missing.length) / fields.length) * 100);
+  return { score, missing };
+}
+
+function leadScore(customer, activities, tasks) {
+  const risk = customerRisk(customer, activities, tasks);
+  let score = 45;
+  score += { A: 22, B: 14, C: 8, D: 0 }[customer.priority] ?? 6;
+  score += Math.round(stageMeta(customer.stage).probability * 0.18);
+  if (customer.amount && Number(customer.amount) > 0) score += 8;
+  if (customer.painPoint) score += 6;
+  if (customer.decisionMaker) score += 6;
+  if (tasks.some((task) => task.customerId === customer.id && !task.done)) score += 5;
+  if (risk.level === "risk") score -= 14;
+  if (risk.level === "watch") score -= 6;
+  return Math.max(0, Math.min(100, score));
+}
+
+function leadActionTitle(customer, risk) {
+  if (risk.level === "risk") return "先补断点";
+  if (customer.priority === "D") return "判断是否值得继续";
+  if (customer.stage === "新线索") return "完成首次触达";
+  if (customer.stage === "方案报价") return "追报价反馈";
+  if (customer.stage === "谈判中") return "锁定成交条件";
+  return "推进下一步";
+}
+
+function leadActionBody(customer, risk) {
+  if (risk.level === "risk") return risk.reason;
+  if (customer.priority === "D") return "先确认真实需求和时间点；没有明确项目就降低投入频率。";
+  if (customer.stage === "新线索") return "建议今天确认联系人、核心痛点、预算大概区间和是否有下一次沟通。";
+  if (customer.stage === "方案报价") return "不要只问看了吗，直接约 15 分钟复盘范围、价格和决策流程。";
+  if (customer.stage === "谈判中") return "问清楚还差什么才能签，并拆成具体待办和回款节点。";
+  return "把下一步动作写成待办，避免客户停在当前阶段。";
+}
+
+function leadTaskTitle(customer, risk) {
+  if (risk.level === "risk") return `补跟进：${customer.company}`;
+  if (customer.stage === "新线索") return `首次触达：${customer.company}`;
+  if (customer.stage === "方案报价") return `报价复盘：${customer.company}`;
+  if (customer.stage === "谈判中") return `确认成交条件：${customer.company}`;
+  return `推进线索下一步：${customer.company}`;
+}
+
+function buildSalesCallDiagnosis(text, scenario) {
+  const content = String(text || "").trim();
+  const checks = [
+    {
+      title: "开场切入",
+      hit: /今天|这次|目标|想先|确认一下|了解一下/.test(content),
+      good: "开场有明确沟通目标。",
+      bad: "开场目标不清，容易聊散。",
+    },
+    {
+      title: "需求挖掘",
+      hit: /痛点|问题|为什么|影响|现在怎么|最难|卡在哪里|需求/.test(content),
+      good: "有追问客户现状和问题。",
+      bad: "需求挖掘不足，建议多问现状、问题和影响。",
+    },
+    {
+      title: "预算/决策链",
+      hit: /预算|费用|价格|老板|采购|决策|审批|谁拍板|负责人/.test(content),
+      good: "有触达预算或关键人信息。",
+      bad: "缺少预算和决策链确认，这是销售推进的高风险点。",
+    },
+    {
+      title: "价值传递",
+      hit: /提升|减少|节省|效率|风险|案例|数据|ROI|回款|转化/.test(content),
+      good: "价值表达能落到效率、风险或结果。",
+      bad: "价值传递偏弱，避免只讲功能，要翻译成客户收益。",
+    },
+    {
+      title: "明确下一步",
+      hit: /下一步|下次|明天|周|时间|待办|发你|约|确认/.test(content),
+      good: "有下一步动作或时间点。",
+      bad: "缺少明确下一步，沟通结束后容易断档。",
+    },
+  ];
+  const hitCount = checks.filter((item) => item.hit).length;
+  const score = content ? Math.max(38, Math.round((hitCount / checks.length) * 100)) : 0;
+  const level = !content ? "等待录音文本" : score >= 80 ? "质量较好" : score >= 60 ? "需要补强" : "风险较高";
+
+  return {
+    score,
+    level: `${scenario} · ${level}`,
+    items: checks.map((item) => ({
+      ...item,
+      text: item.hit ? item.good : item.bad,
+    })),
+  };
 }
 
 function nextBestAction(customer, activities, tasks) {

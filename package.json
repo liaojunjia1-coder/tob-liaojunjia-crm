@@ -8,6 +8,7 @@
     "api": "node server/index.js",
     "build": "vite build",
     "build:edgeone": "node scripts/build-static.mjs",
+    "build:cn": "node scripts/build-static.mjs && node scripts/inline-dist.mjs && node scripts/compress-standalone.mjs",
     "build:static": "node scripts/build-static.mjs",
     "inline:dist": "node scripts/inline-dist.mjs",
     "preview": "vite preview --host 0.0.0.0"

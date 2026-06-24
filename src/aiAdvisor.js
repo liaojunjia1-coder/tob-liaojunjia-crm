@@ -20,7 +20,7 @@ function cleanHtml(input) {
 }
 
 function inferPainPoints(customer = {}) {
-  const text = `${customer.industry || ""} ${customer.tags || ""} ${customer.note || ""}`;
+  const text = `${customer.industry || ""} ${customer.painPoint || ""} ${customer.tags || ""} ${customer.note || ""}`;
   if (/外贸|询盘|SaaS/i.test(text)) return ["线索分配慢", "跟进断档", "报价反馈周期长"];
   if (/自动化|制造|设备|产线/i.test(text)) return ["产线停机成本高", "售后响应要求高", "项目决策链较长"];
   return ["需求优先级不清", "预算和决策人未确认", "下一步动作容易丢失"];
@@ -33,7 +33,9 @@ function customerScore(customer = {}, data = {}) {
   score += (stageChance[customer.stage] ?? 10) * 0.35;
   if (customer.priority === "A") score += 18;
   if (customer.amount && Number(customer.amount) >= 100000) score += 10;
-  if (customer.closeDate) score += 7;
+  if (customer.recordedAt) score += 4;
+  if (customer.painPoint) score += 5;
+  if (customer.decisionMaker) score += 5;
   if (activities.some((item) => item.customerId === customer.id)) score += 10;
   if (tasks.some((item) => item.customerId === customer.id && !item.done)) score += 8;
   return Math.max(1, Math.min(100, Math.round(score)));
@@ -95,11 +97,11 @@ export function buildCustomerInsight(customer = {}, data = {}, webResults = []) 
     summary: `${customer.company} 当前处于「${customer.stage || "新线索"}」，按阶段估算成交概率约 ${probability}%。`,
     fit: [
       amount ? `预计金额 ${amount.toLocaleString("zh-CN")} 元，加权预测约 ${forecast.toLocaleString("zh-CN")} 元。` : "暂未录入预计金额，建议先问预算区间。",
-      customer.priority === "A" ? "客户评级为 A，建议先确认预算、决策人和时间表。" : "客户评级还不算最高，建议先判断是否有明确痛点和近期项目。",
+      customer.priority === "A" ? "客户评级为 A，建议先确认预算、决策人和下一步时间。" : "客户评级还不算最高，建议先判断是否有明确痛点和近期项目。",
       `可能痛点：${pains.join("、")}。`,
     ],
     nextActions: [
-      "补齐决策人、预算范围、上线时间这三个字段。",
+      "补齐决策人、预算范围、下一步时间这三个信息。",
       "把下一次动作写成待办，不只写在备注里。",
       "用一次短沟通确认客户是否愿意进入下一阶段。",
     ],
