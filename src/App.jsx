@@ -1355,6 +1355,37 @@ function App() {
     }
   }
 
+  async function copyCustomerPlan(customerId) {
+    const customer = data.customers.find((item) => item.id === customerId);
+    if (!customer) return;
+    const plan = customerDealPlan(customer, data.activities, data.tasks);
+    try {
+      await navigator.clipboard.writeText(formatCustomerPlan(customer, plan));
+      setSyncStatus("推进计划已复制");
+    } catch {
+      setSyncStatus("复制失败，请手动选择推进计划");
+    }
+  }
+
+  function startPlannedFollowup(customerId) {
+    const customer = data.customers.find((item) => item.id === customerId);
+    if (!customer) return;
+    const plan = customerDealPlan(customer, data.activities, data.tasks);
+    setSelectedCustomerId(customerId);
+    setActivityForm((form) => ({
+      ...form,
+      customerId,
+      method: plan.method,
+      date: todayInputValue(),
+      content: plan.followupTemplate,
+      nextStep: plan.nextStep,
+      makeTask: true,
+      taskDueDate: todayInputValue(),
+      taskPriority: plan.priority,
+    }));
+    go("followups");
+  }
+
   function createLeadFollowTask(customerId) {
     const customer = data.customers.find((item) => item.id === customerId);
     if (!customer) return;
@@ -1569,6 +1600,7 @@ function App() {
             customers={filteredCustomers}
             data={data}
             onAnalyze={analyzeCustomer}
+            onCopyPlan={copyCustomerPlan}
             onCreateTask={createLeadFollowTask}
             onDelete={deleteCustomer}
             onEdit={openEditCustomerForm}
@@ -1578,6 +1610,7 @@ function App() {
               go("followups");
             }}
             onPickCustomer={setSelectedCustomerId}
+            onPlanFollowup={startPlannedFollowup}
             priorityFilter={priorityFilter}
             riskFilter={riskFilter}
             customerSort={customerSort}
@@ -1641,12 +1674,14 @@ function App() {
             data={data}
             metrics={metrics}
             onCopy={copyReport}
+            onCopyPlan={copyCustomerPlan}
             onCreateTask={createLeadFollowTask}
             onGeneratePlan={generateDailyPlan}
             onPickCustomer={(id) => {
               setSelectedCustomerId(id);
               go("customers");
             }}
+            onPlanFollowup={startPlannedFollowup}
             onToggleTask={toggleTask}
             onViewTasks={() => go("tasks")}
           />
@@ -1960,12 +1995,14 @@ function CustomersView({
   customers,
   data,
   onAnalyze,
+  onCopyPlan,
   onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
   onNewFollow,
   onPickCustomer,
+  onPlanFollowup,
   priorityFilter,
   riskFilter,
   customerSort,
@@ -2054,11 +2091,13 @@ function CustomersView({
               customer={customer}
               customers={data.customers}
               onAnalyze={onAnalyze}
+              onCopyPlan={onCopyPlan}
               onCreateTask={onCreateTask}
               onDelete={onDelete}
               onEdit={onEdit}
               onFieldChange={onFieldChange}
               onNewFollow={onNewFollow}
+              onPlanFollowup={onPlanFollowup}
               tasks={data.tasks}
             />
           ) : (
@@ -2829,9 +2868,11 @@ function ReviewView({
   data,
   metrics,
   onCopy,
+  onCopyPlan,
   onCreateTask,
   onGeneratePlan,
   onPickCustomer,
+  onPlanFollowup,
   onToggleTask,
   onViewTasks,
 }) {
@@ -2879,15 +2920,24 @@ function ReviewView({
                   <span>{risk.label}</span>
                   <strong>{customer.company}</strong>
                   <small>{risk.reason}</small>
+                  <em>{customerDealPlan(customer, data.activities, data.tasks).nextStep}</em>
                 </div>
                 <div className="risk-actions">
                   <button className="ghost-button" onClick={() => onPickCustomer(customer.id)} type="button">
                     <ArrowRight size={15} />
                     客户
                   </button>
+                  <button className="ghost-button" onClick={() => onPlanFollowup(customer.id)} type="button">
+                    <MessageSquare size={15} />
+                    跟进
+                  </button>
                   <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
                     <Bell size={15} />
                     待办
+                  </button>
+                  <button className="ghost-button" onClick={() => onCopyPlan(customer.id)} type="button">
+                    <ClipboardList size={15} />
+                    计划
                   </button>
                 </div>
               </article>
@@ -3277,17 +3327,20 @@ function CustomerDetail({
   customer,
   customers,
   onAnalyze,
+  onCopyPlan,
   onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
   onNewFollow,
+  onPlanFollowup,
   tasks,
 }) {
   const [detailTab, setDetailTab] = useState("基本信息");
   const risk = customerRisk(customer, activities, tasks);
   const recommendation = nextBestAction(customer, activities, tasks);
   const completeness = customerCompleteness(customer);
+  const plan = customerDealPlan(customer, activities, tasks);
 
   return (
     <>
@@ -3371,6 +3424,36 @@ function CustomerDetail({
         <div>
           <strong>{recommendation.title}</strong>
           <p>{recommendation.body}</p>
+        </div>
+      </div>
+
+      <div className="customer-plan-card">
+        <div className="plan-head">
+          <div>
+            <span className="eyebrow">推进计划</span>
+            <h4>{plan.focus}</h4>
+          </div>
+          <strong>{plan.cadence}</strong>
+        </div>
+        <div className="plan-grid">
+          <Info label="下一步" value={plan.nextStep} />
+          <Info label="资料缺口" value={plan.missing.length ? plan.missing.join("、") : "关键资料已完整"} />
+        </div>
+        <strong className="spin-title">SPIN 提问</strong>
+        <div className="spin-list">
+          {plan.questions.map((question) => (
+            <span key={question}>{question}</span>
+          ))}
+        </div>
+        <div className="plan-actions">
+          <button className="primary-button" onClick={() => onPlanFollowup(customer.id)} type="button">
+            <MessageSquare size={17} />
+            带计划记录跟进
+          </button>
+          <button className="secondary-button" onClick={() => onCopyPlan(customer.id)} type="button">
+            <ClipboardList size={17} />
+            复制计划
+          </button>
         </div>
       </div>
 
@@ -3840,6 +3923,87 @@ function nextBestAction(customer, activities, tasks) {
   if (customer.stage === "方案报价") return { title: "推动报价反馈", body: "约一次 15 分钟复盘，确认价格、方案范围和决策流程。" };
   if (customer.stage === "谈判中") return { title: "明确成交条件", body: "问清楚还差什么才能签，拆成可执行待办推进。" };
   return { title: "保持节奏", body: "继续沉淀跟进记录，确保每个客户都有明确下一步。" };
+}
+
+function customerDealPlan(customer, activities, tasks) {
+  const risk = customerRisk(customer, activities, tasks);
+  const completeness = customerCompleteness(customer);
+  const stagePlan =
+    {
+      新线索: {
+        focus: "确认是否是真需求",
+        method: "电话",
+        nextStep: `首次触达 ${customer.contact || "关键联系人"}，确认场景、痛点和下一次沟通时间。`,
+        questions: ["现在怎么处理这个问题？", "这个问题影响了哪些指标？", "如果要推进，谁会参与判断？"],
+      },
+      已联系: {
+        focus: "补齐需求和关键人",
+        method: "微信",
+        nextStep: "补齐痛点、预算区间和决策链，把客户从已联系推进到需求确认。",
+        questions: ["目前最卡的是效率、成本还是管理？", "这个事情有没有明确时间点？", "除了您，还有谁会看方案？"],
+      },
+      需求确认: {
+        focus: "把需求变成方案范围",
+        method: "视频会议",
+        nextStep: "约一次需求复盘，确认方案范围、预算区间、上线节奏和评估标准。",
+        questions: ["如果这个问题不解决，会带来什么损失？", "您希望先试哪个场景？", "什么结果算试点成功？"],
+      },
+      方案报价: {
+        focus: "追回报价反馈",
+        method: "电话",
+        nextStep: "约 15 分钟报价复盘，确认价格、范围、审批流程和竞品对比点。",
+        questions: ["报价里哪一块最需要解释？", "目前卡在预算、范围还是审批？", "如果范围确认，下一步谁拍板？"],
+      },
+      谈判中: {
+        focus: "锁定成交条件",
+        method: "电话",
+        nextStep: "确认还差什么才能签，把合同、回款、试点范围拆成具体待办。",
+        questions: ["现在离签约还差哪一个条件？", "付款节点能否今天确认？", "如果我补齐材料，最快什么时候定？"],
+      },
+      已成交: {
+        focus: "维护复购和转介绍",
+        method: "微信",
+        nextStep: "确认交付体验和复购/转介绍机会，记录客户反馈。",
+        questions: ["目前使用效果是否达到预期？", "还有哪个团队可能也需要？", "是否方便介绍一个类似客户？"],
+      },
+      暂缓: {
+        focus: "判断是否继续投入",
+        method: "微信",
+        nextStep: "确认暂缓原因和重启条件，没有明确时间点则降低跟进频率。",
+        questions: ["暂缓主要是预算、时间还是优先级？", "什么条件出现后会重启？", "我下次什么时候联系更合适？"],
+      },
+    }[customer.stage] || {
+      focus: "推进下一步",
+      method: "电话",
+      nextStep: "确认客户当前状态和下一步动作。",
+      questions: ["当前最重要的问题是什么？", "下一步谁来判断？", "什么时候适合再沟通？"],
+    };
+  const priority = risk.level === "risk" || customer.priority === "A" || customer.stage === "谈判中" ? "高" : customer.priority === "D" ? "低" : "中";
+  const cadence = customer.priority === "A" || ["方案报价", "谈判中"].includes(customer.stage) ? "48小时内" : customer.priority === "D" ? "7天内" : "3天内";
+  const missing = completeness.missing.slice(0, 4);
+  const missingText = missing.length ? `\n需要补齐：${missing.join("、")}` : "";
+  const riskText = risk.level === "good" ? "" : `\n风险处理：${risk.reason}`;
+
+  return {
+    ...stagePlan,
+    priority,
+    cadence,
+    missing,
+    followupTemplate: `推进目标：${stagePlan.focus}\n本次要确认：${stagePlan.questions.join(" / ")}${missingText}${riskText}\n客户反馈：`,
+  };
+}
+
+function formatCustomerPlan(customer, plan) {
+  return [
+    `客户推进计划：${customer.company}`,
+    `阶段：${customer.stage} / ${customer.priority}类`,
+    `推进重点：${plan.focus}`,
+    `建议跟进：${plan.method}，${plan.cadence}`,
+    `下一步：${plan.nextStep}`,
+    `资料缺口：${plan.missing.length ? plan.missing.join("、") : "关键资料已完整"}`,
+    "SPIN问题：",
+    ...plan.questions.map((question) => `- ${question}`),
+  ].join("\n");
 }
 
 export default App;
