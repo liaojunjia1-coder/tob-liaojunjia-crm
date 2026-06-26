@@ -1,7 +1,7 @@
 {
   "name": "销售 CRM",
   "short_name": "销售CRM",
-  "description": "本地优先的 ToB 销售 CRM，用于客户管理、跟进记录和待办提醒。",
+  "description": "本地优先的 ToB 销售 CRM，用于客户管理、跟进记录和销售计划。",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
@@ -37,8 +37,8 @@
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "待办提醒",
-      "short_name": "待办",
+      "name": "计划中心",
+      "short_name": "计划",
       "url": "./?view=tasks",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }

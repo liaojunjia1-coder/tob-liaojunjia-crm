@@ -1264,6 +1264,10 @@ textarea {
   padding: 14px;
 }
 
+.editable-plan-head {
+  align-items: flex-start;
+}
+
 .plan-head {
   align-items: flex-start;
   display: flex;
@@ -1294,6 +1298,52 @@ textarea {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.editable-plan-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.editable-plan-grid label {
+  color: #596579;
+  display: grid;
+  font-size: 14px;
+  font-weight: 850;
+  gap: 8px;
+}
+
+.editable-plan-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.editable-plan-grid input,
+.editable-plan-grid select {
+  font-size: 16px;
+}
+
+.plan-type-picker {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.plan-type-picker button {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 850;
+  min-height: 44px;
+  padding: 10px;
+}
+
+.plan-type-picker button.active {
+  background: #eef3ff;
+  border-color: rgba(37, 99, 235, 0.46);
+  color: #1d4ed8;
 }
 
 .spin-title {
@@ -1552,6 +1602,54 @@ textarea {
   transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 
+.plan-layout {
+  grid-template-columns: 380px minmax(0, 1fr);
+}
+
+.task-row.plan-row {
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  min-height: 96px;
+}
+
+.task-row.plan-row strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.task-row.plan-row small {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.task-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.task-row-actions .ghost-button {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.check-button.plan-status-doing {
+  color: #a85e00;
+}
+
+.check-button.plan-status-todo {
+  color: #1d4ed8;
+}
+
+.check-button.plan-status-done {
+  color: var(--good);
+}
+
+.check-button.plan-status-delay {
+  color: #475569;
+}
+
 .task-row::before {
   background: var(--task-color, var(--blue));
   bottom: 0;
@@ -1732,6 +1830,45 @@ textarea {
 .activity-log-row small {
   color: #6e7378;
   margin-top: 4px;
+}
+
+.action-summary {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 255, 0.92)),
+    #ffffff;
+  border-color: rgba(37, 99, 235, 0.16);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.action-summary h3 {
+  font-size: 22px;
+  line-height: 1.24;
+  margin: 0 0 12px;
+}
+
+.action-summary-chips,
+.action-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.action-summary-chips button {
+  background: #f3f6fb;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 7px 11px;
+}
+
+.action-summary-actions {
+  justify-content: flex-end;
 }
 
 .report-hero {
@@ -2530,7 +2667,11 @@ textarea {
     .playbook-grid,
     .call-analyzer-grid,
     .spin-grid,
-    .lead-workbench {
+    .lead-workbench,
+    .plan-layout,
+    .editable-plan-grid,
+    .plan-type-picker,
+    .action-summary {
     grid-template-columns: 1fr;
   }
 
@@ -2577,6 +2718,20 @@ textarea {
   .report-hero,
   .report-actions {
     flex-direction: column;
+  }
+
+  .action-summary-actions,
+  .action-summary-actions .primary-button,
+  .action-summary-actions .secondary-button,
+  .action-summary-chips button,
+  .task-row-actions,
+  .task-row-actions .ghost-button {
+    width: 100%;
+  }
+
+  .task-row.plan-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .report-actions .primary-button,

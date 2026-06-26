@@ -62,6 +62,8 @@ const STAGES = [
 const METHODS = ["电话", "微信", "邮件", "拜访", "视频会议"];
 const PRIORITIES = ["A", "B", "C", "D"];
 const TASK_PRIORITIES = ["高", "中", "低"];
+const PLAN_TYPES = ["日计划", "周计划", "月计划"];
+const PLAN_STATUSES = ["进行中", "未开始", "已完成", "已延期"];
 const CONTRACT_STATUS = ["合同审核", "已签约", "部分回款", "已回款", "逾期", "暂停"];
 const FOLLOWUP_TEMPLATES = [
   {
@@ -90,7 +92,7 @@ const VIEWS = [
   { id: "customers", label: "客户", icon: Users },
   { id: "leads", label: "线索池", icon: Target },
   { id: "followups", label: "跟进", icon: MessageSquare },
-  { id: "tasks", label: "待办", icon: Bell },
+  { id: "tasks", label: "计划", icon: Bell },
   { id: "review", label: "复盘", icon: ClipboardList },
   { id: "contracts", label: "合同回款", icon: HandCoins },
   { id: "playbook", label: "销售工具", icon: BookOpen },
@@ -365,8 +367,8 @@ const defaultData = {
     },
     {
       id: "log-2",
-      type: "待办",
-      text: "生成了王总试点计划待办。",
+      type: "计划",
+      text: "生成了王总试点计划。",
       createdAt: "2026-06-21T16:10:00.000Z",
     },
   ],
@@ -470,7 +472,12 @@ function normalizeData(raw) {
       recordedAt: customer.recordedAt || customer.closeDate || todayInputValue(),
     })),
     activities: source.activities || [],
-    tasks: (source.tasks || []).map((task) => ({ priority: "中", ...task })),
+    tasks: (source.tasks || []).map((task) => ({
+      priority: "中",
+      ...task,
+      planType: task.planType || "日计划",
+      status: task.done ? "已完成" : task.status || "进行中",
+    })),
     contracts: (source.contracts || []).map((contract) => ({ ...emptyContract, ...contract })),
     logs: source.logs || [],
     settings: { ...defaultSettings, ...(source.settings || {}) },
@@ -594,7 +601,7 @@ function App() {
   const [priorityFilter, setPriorityFilter] = useState("全部评级");
   const [riskFilter, setRiskFilter] = useState("全部风险");
   const [customerSort, setCustomerSort] = useState("风险优先");
-  const [todoFilter, setTodoFilter] = useState("未完成");
+  const [todoFilter, setTodoFilter] = useState("日计划");
   const [customerForm, setCustomerForm] = useState(emptyCustomer);
   const [editingCustomerId, setEditingCustomerId] = useState("");
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -616,6 +623,8 @@ function App() {
     title: "",
     dueDate: todayInputValue(),
     priority: defaultSettings.defaultTaskPriority,
+    planType: "日计划",
+    status: "进行中",
   });
   const [contractForm, setContractForm] = useState({
     ...emptyContract,
@@ -955,18 +964,19 @@ function App() {
 
   function exportTasksCsv() {
     const rows = [
-      ["待办", "关联客户", "截止日期", "优先级", "状态", "创建时间"],
+      ["计划", "关联客户", "计划日期", "计划类型", "优先级", "状态", "创建时间"],
       ...data.tasks.map((task) => [
         task.title,
         customerName(data.customers, task.customerId),
         task.dueDate,
+        task.planType,
         task.priority,
-        task.done ? "已完成" : "未完成",
+        task.status || (task.done ? "已完成" : "进行中"),
         String(task.createdAt || "").slice(0, 10),
       ]),
     ];
-    downloadTextFile(`待办清单-${todayInputValue()}.csv`, `\ufeff${toCsv(rows)}`, "text/csv;charset=utf-8");
-    setBackupStatus("已导出待办 CSV，适合做日报、复盘或外部整理。");
+    downloadTextFile(`计划清单-${todayInputValue()}.csv`, `\ufeff${toCsv(rows)}`, "text/csv;charset=utf-8");
+    setBackupStatus("已导出计划 CSV，适合做日报、复盘或外部整理。");
   }
 
   async function importCustomersCsv(event) {
@@ -1042,7 +1052,7 @@ function App() {
       }
       const nextData = normalizeData(sourceData);
       const confirmed = window.confirm(
-        `将导入 ${nextData.customers.length} 个客户、${nextData.activities.length} 条跟进、${nextData.tasks.length} 个待办，并覆盖当前浏览器里的 CRM 数据。是否继续？`,
+        `将导入 ${nextData.customers.length} 个客户、${nextData.activities.length} 条跟进、${nextData.tasks.length} 个计划，并覆盖当前浏览器里的 CRM 数据。是否继续？`,
       );
       if (!confirmed) {
         setBackupStatus("已取消导入，当前数据未改变。");
@@ -1110,19 +1120,18 @@ function App() {
   }, [data.customers, data.activities, data.tasks, searchText, stageFilter, priorityFilter, riskFilter, customerSort]);
 
   const visibleTasks = useMemo(() => {
-    const today = todayInputValue();
     return data.tasks
       .filter((task) => {
-        if (todoFilter === "未完成") return !task.done;
+        if (todoFilter === "日计划") return !task.done && task.planType === "日计划";
+        if (todoFilter === "周计划") return !task.done && task.planType === "周计划";
+        if (todoFilter === "月计划") return !task.done && task.planType === "月计划";
         if (todoFilter === "已完成") return task.done;
-        if (todoFilter === "今日") return !task.done && task.dueDate === today;
-        if (todoFilter === "超期") return !task.done && task.dueDate && task.dueDate < today;
-        if (todoFilter === "高优先级") return !task.done && task.priority === "高";
         return true;
       })
       .sort(
         (a, b) =>
           a.done - b.done ||
+          planTypeRank(a.planType) - planTypeRank(b.planType) ||
           priorityRank(a.priority) - priorityRank(b.priority) ||
           String(a.dueDate).localeCompare(String(b.dueDate)),
       );
@@ -1132,6 +1141,10 @@ function App() {
     const today = todayInputValue();
     const openTasks = data.tasks.filter((task) => !task.done);
     const overdueTasks = openTasks.filter((task) => task.dueDate && task.dueDate < today);
+    const dayPlans = openTasks.filter((task) => task.planType === "日计划");
+    const weekPlans = openTasks.filter((task) => task.planType === "周计划");
+    const monthPlans = openTasks.filter((task) => task.planType === "月计划");
+    const doneTasks = data.tasks.filter((task) => task.done);
     const totalAmount = data.customers.reduce((sum, customer) => sum + Number(customer.amount || 0), 0);
     const forecast = data.customers.reduce((sum, customer) => {
       const probability = stageMeta(customer.stage).probability / 100;
@@ -1143,7 +1156,7 @@ function App() {
       (sum, contract) => sum + Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0)),
       0,
     );
-    return { openTasks, overdueTasks, totalAmount, forecast, aCustomers, atRisk, receivable };
+    return { openTasks, overdueTasks, dayPlans, weekPlans, monthPlans, doneTasks, totalAmount, forecast, aCustomers, atRisk, receivable };
   }, [data]);
 
   const customerActivities = useMemo(
@@ -1290,6 +1303,8 @@ function App() {
             title: activityForm.nextStep.trim(),
             dueDate: taskDueDate || todayInputValue(),
             priority: taskPriority || "中",
+            planType: "日计划",
+            status: "进行中",
             done: false,
             createdAt: new Date().toISOString(),
           },
@@ -1321,10 +1336,13 @@ function App() {
       id: makeId("t"),
       ...taskForm,
       title: taskForm.title.trim(),
-      done: false,
+      planType: taskForm.planType || "日计划",
+      status: taskForm.status || "进行中",
+      done: taskForm.status === "已完成",
+      completedAt: taskForm.status === "已完成" ? new Date().toISOString() : "",
       createdAt: new Date().toISOString(),
     };
-    commit({ ...withLog(data, "待办", `新增待办：${nextTask.title}`), tasks: [nextTask, ...data.tasks] });
+    commit({ ...withLog(data, "计划", `新增计划：${nextTask.title}`), tasks: [nextTask, ...data.tasks] });
     setTaskForm((form) => ({ ...form, title: "" }));
     go("tasks");
   }
@@ -1333,15 +1351,49 @@ function App() {
     const targetTask = data.tasks.find((task) => task.id === taskId);
     const nextDone = !targetTask?.done;
     commit({
-      ...withLog(data, "待办", `${targetTask?.done ? "恢复" : "完成"}待办：${targetTask?.title || ""}`),
+      ...withLog(data, "计划", `${targetTask?.done ? "恢复" : "完成"}计划：${targetTask?.title || ""}`),
       tasks: data.tasks.map((task) =>
-        task.id === taskId ? { ...task, done: nextDone, completedAt: nextDone ? new Date().toISOString() : "" } : task,
+        task.id === taskId
+          ? { ...task, done: nextDone, status: nextDone ? "已完成" : "进行中", completedAt: nextDone ? new Date().toISOString() : "" }
+          : task,
+      ),
+    });
+  }
+
+  function updateTaskStatus(taskId, status) {
+    commit({
+      ...withLog(data, "计划", `更新计划状态：${status}`),
+      tasks: data.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status,
+              done: status === "已完成",
+              completedAt: status === "已完成" ? new Date().toISOString() : "",
+            }
+          : task,
+      ),
+    });
+  }
+
+  function delayTask(taskId) {
+    commit({
+      ...withLog(data, "计划", "延期计划"),
+      tasks: data.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status: "已延期",
+              done: false,
+              dueDate: nextDateValue(task.dueDate || todayInputValue(), 1),
+            }
+          : task,
       ),
     });
   }
 
   function deleteTask(taskId) {
-    commit({ ...withLog(data, "待办", "删除待办"), tasks: data.tasks.filter((task) => task.id !== taskId) });
+    commit({ ...withLog(data, "计划", "删除计划"), tasks: data.tasks.filter((task) => task.id !== taskId) });
   }
 
   async function copyReport(text) {
@@ -1386,6 +1438,32 @@ function App() {
     go("followups");
   }
 
+  function saveCustomerPlan(customerId, draft) {
+    const customer = data.customers.find((item) => item.id === customerId);
+    if (!customer || !draft.nextStep.trim()) return;
+    const nextData = withLog(data, "计划", `保存推进计划：${customer.company}`);
+    const nextTasks =
+      draft.planType === "不加入计划"
+        ? data.tasks
+        : [
+            {
+              id: makeId("t"),
+              customerId,
+              title: draft.nextStep.trim(),
+              dueDate: draft.dueDate || todayInputValue(),
+              priority: draft.priority || "中",
+              planType: draft.planType,
+              status: draft.status || "进行中",
+              done: draft.status === "已完成",
+              completedAt: draft.status === "已完成" ? new Date().toISOString() : "",
+              createdAt: new Date().toISOString(),
+            },
+            ...data.tasks,
+          ];
+    commit({ ...nextData, tasks: nextTasks });
+    setSyncStatus(draft.planType === "不加入计划" ? "推进计划已保存" : `已加入${draft.planType}`);
+  }
+
   function createLeadFollowTask(customerId) {
     const customer = data.customers.find((item) => item.id === customerId);
     if (!customer) return;
@@ -1396,11 +1474,13 @@ function App() {
       title: leadTaskTitle(customer, risk),
       dueDate: todayInputValue(),
       priority: risk.level === "risk" || customer.priority === "A" ? "高" : "中",
+      planType: "日计划",
+      status: "进行中",
       done: false,
       createdAt: new Date().toISOString(),
     };
-    commit({ ...withLog(data, "待办", `生成客户待办：${customer.company}`), tasks: [nextTask, ...data.tasks] });
-    setSyncStatus("已生成线索待办");
+    commit({ ...withLog(data, "计划", `生成客户计划：${customer.company}`), tasks: [nextTask, ...data.tasks] });
+    setSyncStatus("已生成客户计划");
   }
 
   function generateDailyPlan() {
@@ -1426,22 +1506,24 @@ function App() {
         title: leadTaskTitle(customer, risk),
         dueDate: today,
         priority: risk.level === "risk" || customer.priority === "A" || customer.stage === "谈判中" ? "高" : "中",
+        planType: "日计划",
+        status: "进行中",
         done: false,
         createdAt: new Date().toISOString(),
       };
     });
 
     if (!nextTasks.length) {
-      setSyncStatus("今日计划已是最新");
+      setSyncStatus("日计划已是最新");
       return;
     }
 
     commit({
-      ...withLog(data, "待办", `生成今日跟进计划：${nextTasks.length} 个待办`),
+      ...withLog(data, "计划", `生成日计划：${nextTasks.length} 个动作`),
       tasks: [...nextTasks, ...data.tasks],
     });
-    setSyncStatus(`已生成 ${nextTasks.length} 个今日待办`);
-    setTodoFilter("今日");
+    setSyncStatus(`已生成 ${nextTasks.length} 个日计划`);
+    setTodoFilter("日计划");
   }
 
   function saveContract(event) {
@@ -1573,7 +1655,10 @@ function App() {
               go("customers");
             }}
             onToggleTask={toggleTask}
+            onViewContracts={() => go("contracts")}
+            onViewCustomers={() => go("customers")}
             onViewPipeline={() => go("pipeline")}
+            onViewReview={() => go("review")}
             onViewTasks={() => go("tasks")}
           />
         )}
@@ -1611,6 +1696,7 @@ function App() {
             }}
             onPickCustomer={setSelectedCustomerId}
             onPlanFollowup={startPlannedFollowup}
+            onSavePlan={saveCustomerPlan}
             priorityFilter={priorityFilter}
             riskFilter={riskFilter}
             customerSort={customerSort}
@@ -1657,10 +1743,18 @@ function App() {
         {activeView === "tasks" && (
           <TasksView
             customers={data.customers}
+            metrics={metrics}
             onChange={setTaskForm}
+            onDelay={delayTask}
             onDelete={deleteTask}
+            onPickCustomer={(id) => {
+              setSelectedCustomerId(id);
+              go("customers");
+            }}
+            onPlanFollowup={startPlannedFollowup}
             onSave={saveTask}
             onToggle={toggleTask}
+            onUpdateStatus={updateTaskStatus}
             setTodoFilter={setTodoFilter}
             taskForm={taskForm}
             todoFilter={todoFilter}
@@ -1741,21 +1835,35 @@ function App() {
   );
 }
 
-function DashboardView({ data, metrics, onGeneratePlan, onPickCustomer, onToggleTask, onViewPipeline, onViewTasks }) {
+function DashboardView({
+  data,
+  metrics,
+  onGeneratePlan,
+  onPickCustomer,
+  onToggleTask,
+  onViewContracts,
+  onViewCustomers,
+  onViewPipeline,
+  onViewReview,
+  onViewTasks,
+}) {
   return (
     <section className="view">
       <div className="metrics-grid">
-        <Metric title="客户总数" value={data.customers.length} detail={`${metrics.aCustomers} 个 A 类客户`} />
-        <Metric title="销售管道" value={money(metrics.totalAmount)} detail="全部机会金额" />
-        <Metric title="加权预测" value={money(metrics.forecast)} detail="按阶段概率折算" />
-        <Metric title="超期待办" value={metrics.overdueTasks.length} detail={`${metrics.openTasks.length} 个未完成`} />
+        <Metric title="日计划" value={metrics.dayPlans.length} detail="今天执行" />
+        <Metric title="周计划" value={metrics.weekPlans.length} detail="本周推进" />
+        <Metric title="月计划" value={metrics.monthPlans.length} detail="客户经营" />
+        <Metric title="高风险客户" value={metrics.atRisk.length} detail={`${metrics.overdueTasks.length} 个超期动作`} />
       </div>
 
-      <BusinessGuide />
-
-      <BusinessHealth data={data} metrics={metrics} onGeneratePlan={onGeneratePlan} />
-
-      <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
+      <DashboardActionSummary
+        metrics={metrics}
+        onGeneratePlan={onGeneratePlan}
+        onViewContracts={onViewContracts}
+        onViewCustomers={onViewCustomers}
+        onViewReview={onViewReview}
+        onViewTasks={onViewTasks}
+      />
 
       <div className="content-grid">
         <section className="surface">
@@ -1790,6 +1898,38 @@ function ActivityLog({ logs = [] }) {
   );
 }
 
+function DashboardActionSummary({ metrics, onGeneratePlan, onViewContracts, onViewCustomers, onViewReview, onViewTasks }) {
+  return (
+    <section className="surface action-summary">
+      <div>
+        <span className="eyebrow">行动摘要</span>
+        <h3>今天只展示关键提醒</h3>
+        <div className="action-summary-chips">
+          <button onClick={onViewTasks} type="button">今日 {metrics.dayPlans.length} 个进行中</button>
+          <button onClick={onViewTasks} type="button">本周 {metrics.weekPlans.length} 个待推进</button>
+          <button onClick={onViewTasks} type="button">本月 {metrics.monthPlans.length} 个经营客户</button>
+          <button onClick={onViewCustomers} type="button">高风险 {metrics.atRisk.length} 个</button>
+          <button onClick={onViewContracts} type="button">待回款 {money(metrics.receivable)}</button>
+        </div>
+      </div>
+      <div className="action-summary-actions">
+        <button className="secondary-button" onClick={onGeneratePlan} type="button">
+          <Bell size={16} />
+          生成日计划
+        </button>
+        <button className="primary-button" onClick={onViewTasks} type="button">
+          进入计划
+          <ArrowRight size={16} />
+        </button>
+        <button className="secondary-button" onClick={onViewReview} type="button">
+          <ClipboardList size={16} />
+          销售复盘
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function PriorityActions({ data, onPickCustomer, onToggleTask, onViewTasks }) {
   const actions = data.tasks
     .filter((task) => !task.done)
@@ -1802,7 +1942,7 @@ function PriorityActions({ data, onPickCustomer, onToggleTask, onViewTasks }) {
 
   return (
     <section className="surface priority-actions">
-      <SectionHeader title="今日优先动作" action="查看待办" onClick={onViewTasks} />
+      <SectionHeader title="今日优先动作" action="查看计划" onClick={onViewTasks} />
       <div className="priority-action-list">
         {actions.map((task) => (
           <article className={`priority-action task-priority-${task.priority}`} key={task.id}>
@@ -1855,7 +1995,7 @@ function BusinessHealth({ data, metrics, onGeneratePlan }) {
     {
       done: metrics.openTasks.length >= 4,
       title: "行动闭环清晰",
-      detail: `${metrics.openTasks.length} 个未完成待办，体现销售推进节奏。`,
+      detail: `${metrics.openTasks.length} 个未完成计划，体现销售推进节奏。`,
     },
     {
       done: stageCount >= 4,
@@ -1872,7 +2012,7 @@ function BusinessHealth({ data, metrics, onGeneratePlan }) {
         <div>
           <span className="eyebrow">运营体检</span>
           <h3>客户池健康度</h3>
-          <p>系统自动检查客户、跟进、待办和阶段覆盖，帮助你判断今天该优先处理什么。</p>
+          <p>系统自动检查客户、跟进、计划和阶段覆盖，帮助你判断今天该优先处理什么。</p>
         </div>
         <div className="health-actions">
           <div className="readiness-score">
@@ -1881,7 +2021,7 @@ function BusinessHealth({ data, metrics, onGeneratePlan }) {
           </div>
           <button className="secondary-button" onClick={onGeneratePlan} type="button">
             <Bell size={16} />
-            生成今日计划
+            生成日计划
           </button>
         </div>
       </div>
@@ -1910,7 +2050,7 @@ function BusinessGuide() {
         <span className="eyebrow">工作台</span>
         <h3>围绕客户、跟进和下一步管理销售节奏</h3>
         <p>
-          每个客户都保留来源、阶段、金额、沟通记录和待办动作，方便每天快速判断机会进展和风险。
+          每个客户都保留来源、阶段、金额、沟通记录和计划动作，方便每天快速判断机会进展和风险。
         </p>
       </div>
       <div className="demo-points">
@@ -1924,7 +2064,7 @@ function BusinessGuide() {
         </article>
         <article>
           <strong>行动闭环</strong>
-          <span>把报价、复盘、二次沟通变成待办提醒，避免销售动作断档。</span>
+          <span>把报价、复盘、二次沟通变成计划提醒，避免销售动作断档。</span>
         </article>
       </div>
     </section>
@@ -2003,6 +2143,7 @@ function CustomersView({
   onNewFollow,
   onPickCustomer,
   onPlanFollowup,
+  onSavePlan,
   priorityFilter,
   riskFilter,
   customerSort,
@@ -2098,6 +2239,7 @@ function CustomersView({
               onFieldChange={onFieldChange}
               onNewFollow={onNewFollow}
               onPlanFollowup={onPlanFollowup}
+              onSavePlan={onSavePlan}
               tasks={data.tasks}
             />
           ) : (
@@ -2259,7 +2401,7 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
                 <div className="lead-actions">
                   <button className="primary-button" onClick={() => onCreateTask(selectedCustomer.id)} type="button">
                     <Bell size={17} />
-                    生成待办
+                    生成计划
                   </button>
                   <button className="secondary-button" onClick={() => onPickCustomer(selectedCustomer.id)} type="button">
                     <ArrowRight size={17} />
@@ -2446,7 +2588,7 @@ function PlaybookView() {
     { title: "拜访纪要", body: "把聊天记录或会议内容整理为结论、决议项、待澄清问题和下一步动作。" },
     { title: "需求提炼", body: "区分显性需求、隐性需求、未满足需求，避免只记录客户表面说法。" },
     { title: "商务风险", body: "识别长账期、过度承诺、竞品介入、交付范围不清和回款风险。" },
-    { title: "客户归档", body: "把本次沟通沉淀为 CRM 更新项：痛点、决策链、阶段、待办和风险。" },
+    { title: "客户归档", body: "把本次沟通沉淀为 CRM 更新项：痛点、决策链、阶段、计划和风险。" },
   ];
 
   function updateReviewDraft(field, value) {
@@ -2467,7 +2609,7 @@ function PlaybookView() {
     const nextDraft = {
       conclusion: `${callScenario}诊断分 ${diagnosis.score}，${diagnosis.level}。`,
       blocker: weakItems.length ? weakItems.join("\n") : "本次沟通主要动作完整，下一步重点是持续推进客户承诺。",
-      nextStep: "把未完成项拆成待办，并在下次沟通前补齐。",
+      nextStep: "把未完成项拆成计划，并在下次沟通前补齐。",
       ability: strongItems.length ? `做得较好：${strongItems.join("、")}。` : "需要先补齐开场目标、需求挖掘、价值传递和下一步动作。",
     };
     setReviewDraft(nextDraft);
@@ -2721,7 +2863,7 @@ function FollowupsView({
               />
             </label>
             <label className="switch-row compact wide">
-              <span>同步生成待办</span>
+                <span>同步生成计划</span>
               <input
                 checked={activityForm.makeTask}
                 onChange={(event) => onChange({ ...activityForm, makeTask: event.target.checked })}
@@ -2731,7 +2873,7 @@ function FollowupsView({
             {activityForm.makeTask && (
               <>
                 <label>
-                  待办日期
+                  计划日期
                   <input
                     onChange={(event) => onChange({ ...activityForm, taskDueDate: event.target.value })}
                     type="date"
@@ -2739,7 +2881,7 @@ function FollowupsView({
                   />
                 </label>
                 <label>
-                  待办优先级
+                  计划优先级
                   <select onChange={(event) => onChange({ ...activityForm, taskPriority: event.target.value })} value={activityForm.taskPriority}>
                     {TASK_PRIORITIES.map((priority) => (
                       <option key={priority}>{priority}</option>
@@ -2767,20 +2909,45 @@ function FollowupsView({
   );
 }
 
-function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFilter, taskForm, todoFilter, visibleTasks }) {
+function TasksView({
+  customers,
+  metrics,
+  onChange,
+  onDelay,
+  onDelete,
+  onPickCustomer,
+  onPlanFollowup,
+  onSave,
+  onToggle,
+  onUpdateStatus,
+  setTodoFilter,
+  taskForm,
+  todoFilter,
+  visibleTasks,
+}) {
   return (
     <section className="view">
-      <div className="content-grid">
+      <div className="metrics-grid">
+        <Metric title="日计划" value={metrics.dayPlans.length} detail="今天执行" />
+        <Metric title="周计划" value={metrics.weekPlans.length} detail="本周推进" />
+        <Metric title="月计划" value={metrics.monthPlans.length} detail="客户经营" />
+        <Metric title="已完成" value={metrics.doneTasks.length} detail="动作闭环" />
+      </div>
+
+      <div className="content-grid plan-layout">
         <section className="surface">
           <div className="panel-heading">
-            <h3>新增待办提醒</h3>
+            <div>
+              <span className="eyebrow">新增计划</span>
+              <h3>安排销售动作</h3>
+            </div>
           </div>
           <form className="form-grid single" onSubmit={onSave}>
             <label>
-              待办事项
+              计划事项
               <input
                 onChange={(event) => onChange({ ...taskForm, title: event.target.value })}
-                placeholder="例如：明天发报价单"
+                placeholder="例如：报价复盘：前海云贸科技"
                 required
                 value={taskForm.title}
               />
@@ -2799,6 +2966,22 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
               </select>
             </label>
             <label>
+              计划类型
+              <select onChange={(event) => onChange({ ...taskForm, planType: event.target.value })} value={taskForm.planType}>
+                {PLAN_TYPES.map((type) => (
+                  <option key={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              状态
+              <select onChange={(event) => onChange({ ...taskForm, status: event.target.value })} value={taskForm.status}>
+                {PLAN_STATUSES.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label>
               优先级
               <select
                 onChange={(event) => onChange({ ...taskForm, priority: event.target.value })}
@@ -2810,7 +2993,7 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
               </select>
             </label>
             <label>
-              提醒日期
+              计划日期
               <input
                 onChange={(event) => onChange({ ...taskForm, dueDate: event.target.value })}
                 type="date"
@@ -2820,7 +3003,7 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
             <div className="form-actions">
               <button className="primary-button" type="submit">
                 <Save size={18} />
-                保存待办
+                保存计划
               </button>
             </div>
           </form>
@@ -2828,9 +3011,12 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
 
         <section className="surface">
           <div className="panel-heading">
-            <h3>待办列表</h3>
+            <div>
+              <span className="eyebrow">计划列表</span>
+              <h3>销售推进节奏</h3>
+            </div>
             <div className="segmented">
-              {["未完成", "今日", "超期", "高优先级", "已完成", "全部"].map((item) => (
+              {["日计划", "周计划", "月计划", "已完成", "全部"].map((item) => (
                 <button className={todoFilter === item ? "active" : ""} key={item} onClick={() => setTodoFilter(item)} type="button">
                   {item}
                 </button>
@@ -2839,23 +3025,46 @@ function TasksView({ customers, onChange, onDelete, onSave, onToggle, setTodoFil
           </div>
           <div className="task-list">
             {visibleTasks.map((task) => (
-              <div className={`task-row task-priority-${task.priority}${task.done ? " done" : ""}`} key={task.id}>
-                <button className="check-button" onClick={() => onToggle(task.id)} title={task.done ? "标记未完成" : "标记完成"} type="button">
+              <div className={`task-row plan-row task-priority-${task.priority}${task.done ? " done" : ""}`} key={task.id}>
+                <button
+                  className={`check-button plan-status-${statusClass(task.status)}`}
+                  onClick={() => onUpdateStatus(task.id, task.done ? "进行中" : "已完成")}
+                  title={task.done ? "恢复进行中" : "标记完成"}
+                  type="button"
+                >
                   {task.done ? <Check size={17} /> : <Circle size={17} />}
-                  <span>{task.done ? "已完成" : "完成"}</span>
+                  <span>{task.status || (task.done ? "已完成" : "进行中")}</span>
                 </button>
                 <div>
                   <strong>{task.title}</strong>
                   <small>
-                    {task.priority}优先级 · {task.dueDate} · {customerName(customers, task.customerId)}
+                    {task.planType || "日计划"} · {task.priority}优先级 · {task.dueDate || "未设日期"} · {customerName(customers, task.customerId)}
                   </small>
                 </div>
-                <button className="icon-button danger" onClick={() => onDelete(task.id)} title="删除待办" type="button">
-                  <Trash2 size={17} />
-                </button>
+                <div className="task-row-actions">
+                  {!task.done && (
+                    <>
+                      <button className="ghost-button" onClick={() => onToggle(task.id)} type="button">
+                        完成
+                      </button>
+                      <button className="ghost-button" onClick={() => onDelay(task.id)} type="button">
+                        延期
+                      </button>
+                    </>
+                  )}
+                  <button className="ghost-button" onClick={() => onPlanFollowup(task.customerId)} type="button">
+                    跟进
+                  </button>
+                  <button className="ghost-button" onClick={() => onPickCustomer(task.customerId)} type="button">
+                    客户
+                  </button>
+                  <button className="icon-button danger" onClick={() => onDelete(task.id)} title="删除计划" type="button">
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               </div>
             ))}
-            {visibleTasks.length === 0 && <EmptyState text="当前没有待办" />}
+            {visibleTasks.length === 0 && <EmptyState text="当前没有计划" />}
           </div>
         </section>
       </div>
@@ -2882,7 +3091,7 @@ function ReviewView({
     <section className="view">
       <div className="metrics-grid">
         <Metric title="今日跟进" value={review.todayActivities.length} detail={`${review.todayCustomers.length} 个客户有动作`} />
-        <Metric title="今日完成" value={review.doneToday.length} detail={`${review.openToday.length} 个今日未完成`} />
+        <Metric title="今日完成" value={review.doneToday.length} detail={`${review.openToday.length} 个日计划未完成`} />
         <Metric title="高风险客户" value={review.riskCustomers.length} detail={`${review.watchCustomers.length} 个需动作`} />
         <Metric title="预计回款" value={money(metrics.receivable)} detail="未回款金额" />
       </div>
@@ -2891,7 +3100,7 @@ function ReviewView({
         <div>
           <span className="eyebrow">日报复盘</span>
           <h3>把今天的销售动作整理成可复制日报</h3>
-          <p>自动汇总跟进、完成待办、风险客户和明日优先动作，减少手工写日报的时间。</p>
+          <p>自动汇总跟进、日计划完成情况、风险客户和下一步动作，减少手工写日报的时间。</p>
         </div>
         <div className="report-actions">
           <button className="primary-button" onClick={() => onCopy(review.reportText)} type="button">
@@ -2900,7 +3109,7 @@ function ReviewView({
           </button>
           <button className="secondary-button" onClick={onGeneratePlan} type="button">
             <Bell size={17} />
-            生成今日计划
+            生成日计划
           </button>
         </div>
       </section>
@@ -2912,7 +3121,7 @@ function ReviewView({
         </section>
 
         <section className="surface">
-          <SectionHeader title="风险闭环" action="查看待办" onClick={onViewTasks} />
+          <SectionHeader title="风险闭环" action="查看计划" onClick={onViewTasks} />
           <div className="risk-list">
             {review.priorityCustomers.map(({ customer, risk }) => (
               <article className={`risk-item ${risk.level}`} key={customer.id}>
@@ -2933,7 +3142,7 @@ function ReviewView({
                   </button>
                   <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
                     <Bell size={15} />
-                    待办
+                    计划
                   </button>
                   <button className="ghost-button" onClick={() => onCopyPlan(customer.id)} type="button">
                     <ClipboardList size={15} />
@@ -2960,7 +3169,7 @@ function ReviewView({
                 </div>
               </article>
             ))}
-            {review.doneToday.length === 0 && <EmptyState text="今天还没有完成待办" />}
+            {review.doneToday.length === 0 && <EmptyState text="今天还没有完成日计划" />}
           </div>
         </section>
 
@@ -2979,7 +3188,7 @@ function ReviewView({
                 </button>
               </article>
             ))}
-            {review.openToday.length === 0 && <EmptyState text="今日待办已清空" />}
+            {review.openToday.length === 0 && <EmptyState text="日计划已清空" />}
           </div>
         </section>
       </div>
@@ -3051,7 +3260,7 @@ function SettingsView({
               <input checked={rememberLogin} onChange={(event) => setRememberLogin(event.target.checked)} type="checkbox" />
             </label>
             <label>
-              默认待办优先级
+              默认计划优先级
               <select
                 onChange={(event) => onSaveSettings({ defaultTaskPriority: event.target.value })}
                 value={data.settings.defaultTaskPriority}
@@ -3106,7 +3315,7 @@ function SettingsView({
           <div className="mini-stats-grid">
             <Info label="客户" value={data.customers.length} />
             <Info label="跟进" value={data.activities.length} />
-            <Info label="待办" value={data.tasks.length} />
+            <Info label="计划" value={data.tasks.length} />
             <Info label="合同" value={data.contracts.length} />
             <Info label="AI模式" value={data.settings.aiMode} />
           </div>
@@ -3124,7 +3333,7 @@ function SettingsView({
         <div className="backup-panel">
           <article>
             <strong>导出备份</strong>
-            <span>生成 JSON 文件，里面包含客户、跟进、待办和设置。</span>
+            <span>生成 JSON 文件，里面包含客户、跟进、计划和设置。</span>
             <button className="secondary-button" onClick={onExportBackup} type="button">
               <Download size={17} />
               导出数据
@@ -3139,11 +3348,11 @@ function SettingsView({
             </button>
           </article>
           <article>
-            <strong>导出待办表</strong>
+            <strong>导出计划表</strong>
             <span>导出未完成和已完成动作，方便复盘今天做了什么。</span>
             <button className="secondary-button" onClick={onExportTasksCsv} type="button">
               <Download size={17} />
-              待办CSV
+              计划CSV
             </button>
           </article>
           <article>
@@ -3179,7 +3388,7 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
           <div className="brand-mark">LJ</div>
           <div>
             <h1>tob廖俊嘉</h1>
-            <p>本机保存客户、跟进和待办，打开即可使用。</p>
+            <p>本机保存客户、跟进和计划，打开即可使用。</p>
           </div>
         </div>
         {STATIC_LOCAL_MODE && (
@@ -3334,6 +3543,7 @@ function CustomerDetail({
   onFieldChange,
   onNewFollow,
   onPlanFollowup,
+  onSavePlan,
   tasks,
 }) {
   const [detailTab, setDetailTab] = useState("基本信息");
@@ -3341,6 +3551,25 @@ function CustomerDetail({
   const recommendation = nextBestAction(customer, activities, tasks);
   const completeness = customerCompleteness(customer);
   const plan = customerDealPlan(customer, activities, tasks);
+  const [planDraft, setPlanDraft] = useState(() => ({
+    nextStep: plan.nextStep,
+    method: plan.method,
+    dueDate: todayInputValue(),
+    priority: plan.priority,
+    status: "进行中",
+    planType: "不加入计划",
+  }));
+
+  useEffect(() => {
+    setPlanDraft({
+      nextStep: plan.nextStep,
+      method: plan.method,
+      dueDate: todayInputValue(),
+      priority: plan.priority,
+      status: "进行中",
+      planType: "不加入计划",
+    });
+  }, [customer.id, plan.method, plan.nextStep, plan.priority]);
 
   return (
     <>
@@ -3428,31 +3657,74 @@ function CustomerDetail({
       </div>
 
       <div className="customer-plan-card">
-        <div className="plan-head">
+        <div className="plan-head editable-plan-head">
           <div>
-            <span className="eyebrow">推进计划</span>
-            <h4>{plan.focus}</h4>
+            <span className="eyebrow">客户推进计划</span>
+            <h4>{customer.company} · {customer.stage}</h4>
           </div>
-          <strong>{plan.cadence}</strong>
+          <strong>{customer.priority}类 / {customer.stage}</strong>
         </div>
-        <div className="plan-grid">
-          <Info label="下一步" value={plan.nextStep} />
-          <Info label="资料缺口" value={plan.missing.length ? plan.missing.join("、") : "关键资料已完整"} />
+        <div className="editable-plan-grid">
+          <label className="wide">
+            下一步动作
+            <input
+              onChange={(event) => setPlanDraft({ ...planDraft, nextStep: event.target.value })}
+              value={planDraft.nextStep}
+            />
+          </label>
+          <label>
+            跟进方式
+            <select onChange={(event) => setPlanDraft({ ...planDraft, method: event.target.value })} value={planDraft.method}>
+              {METHODS.map((method) => (
+                <option key={method}>{method}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            计划日期
+            <input onChange={(event) => setPlanDraft({ ...planDraft, dueDate: event.target.value })} type="date" value={planDraft.dueDate} />
+          </label>
+          <label>
+            优先级
+            <select onChange={(event) => setPlanDraft({ ...planDraft, priority: event.target.value })} value={planDraft.priority}>
+              {TASK_PRIORITIES.map((priority) => (
+                <option key={priority}>{priority}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            状态
+            <select onChange={(event) => setPlanDraft({ ...planDraft, status: event.target.value })} value={planDraft.status}>
+              {PLAN_STATUSES.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
+            </select>
+          </label>
         </div>
-        <strong className="spin-title">SPIN 提问</strong>
-        <div className="spin-list">
-          {plan.questions.map((question) => (
-            <span key={question}>{question}</span>
+        <div className="plan-type-picker">
+          {["不加入计划", ...PLAN_TYPES].map((type) => (
+            <button
+              className={planDraft.planType === type ? "active" : ""}
+              key={type}
+              onClick={() => setPlanDraft({ ...planDraft, planType: type })}
+              type="button"
+            >
+              {type}
+            </button>
           ))}
         </div>
         <div className="plan-actions">
-          <button className="primary-button" onClick={() => onPlanFollowup(customer.id)} type="button">
+          <button className="secondary-button" onClick={() => onPlanFollowup(customer.id)} type="button">
             <MessageSquare size={17} />
-            带计划记录跟进
+            记录跟进
           </button>
           <button className="secondary-button" onClick={() => onCopyPlan(customer.id)} type="button">
             <ClipboardList size={17} />
             复制计划
+          </button>
+          <button className="primary-button" onClick={() => onSavePlan(customer.id, planDraft)} type="button">
+            <Save size={17} />
+            保存计划
           </button>
         </div>
       </div>
@@ -3468,7 +3740,7 @@ function CustomerDetail({
         </button>
         <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
           <Bell size={16} />
-          生成待办
+          生成计划
         </button>
       </div>
 
@@ -3646,7 +3918,7 @@ function viewTitle(view) {
     customers: "客户资产",
     leads: "线索池",
     followups: "跟进记录",
-    tasks: "待办提醒",
+    tasks: "计划中心",
     review: "销售复盘",
     contracts: "合同回款",
     playbook: "销售工具",
@@ -3661,7 +3933,7 @@ function viewSubtitle(view) {
     customers: "看客户画像、痛点、预算、阶段和最近跟进。",
     leads: "检查来源质量、重复客户和待激活机会。",
     followups: "每次沟通都留下结论和下一步动作。",
-    tasks: "把报价、复盘、二次沟通变成可执行提醒。",
+    tasks: "按日、周、月管理销售动作。",
     review: "自动生成日报，检查今天动作是否闭环。",
     contracts: "记录合同金额、回款节点和逾期风险。",
     playbook: "用录音转写做诊断，结合 SPIN 和 Sales Skill 提升每次沟通质量。",
@@ -3671,6 +3943,14 @@ function viewSubtitle(view) {
 
 function priorityRank(priority) {
   return { 高: 0, 中: 1, 低: 2 }[priority] ?? 3;
+}
+
+function planTypeRank(type) {
+  return { 日计划: 0, 周计划: 1, 月计划: 2 }[type] ?? 3;
+}
+
+function statusClass(status) {
+  return { 进行中: "doing", 未开始: "todo", 已完成: "done", 已延期: "delay" }[status] || "doing";
 }
 
 function customerPriorityRank(priority) {
@@ -3693,6 +3973,13 @@ function daysSince(date) {
   return Math.floor((today.getTime() - target.getTime()) / 86400000);
 }
 
+function nextDateValue(date, days = 1) {
+  const base = new Date(`${date || todayInputValue()}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return todayInputValue();
+  base.setDate(base.getDate() + days);
+  return new Date(base.getTime() - base.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 function salesReview(data, metrics) {
   const today = todayInputValue();
   const todayActivities = data.activities.filter(
@@ -3700,10 +3987,10 @@ function salesReview(data, metrics) {
   );
   const todayCustomers = [...new Set(todayActivities.map((activity) => activity.customerId))];
   const doneToday = data.tasks.filter(
-    (task) => task.done && (dateStartsToday(task.completedAt, today) || (!task.completedAt && task.dueDate === today)),
+    (task) => task.planType === "日计划" && task.done && (dateStartsToday(task.completedAt, today) || (!task.completedAt && task.dueDate === today)),
   );
   const openToday = data.tasks
-    .filter((task) => !task.done && task.dueDate && task.dueDate <= today)
+    .filter((task) => task.planType === "日计划" && !task.done && task.dueDate && task.dueDate <= today)
     .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || String(a.dueDate).localeCompare(String(b.dueDate)));
   const scoredCustomers = data.customers
     .map((customer) => ({ customer, risk: customerRisk(customer, data.activities, data.tasks) }))
@@ -3729,20 +4016,20 @@ function salesReview(data, metrics) {
           .join("\n")
       : "- 今天还没有记录跟进。",
     "",
-    `2. 今日完成：${doneToday.length} 个待办。`,
+    `2. 今日完成：${doneToday.length} 个计划动作。`,
     doneToday.length
       ? doneToday.slice(0, 5).map((task) => `- ${task.title}（${customerName(data.customers, task.customerId)}）`).join("\n")
-      : "- 暂无已完成待办。",
+      : "- 暂无已完成日计划。",
     "",
     `3. 风险客户：${riskCustomers.length} 个高风险，${watchCustomers.length} 个需动作。`,
     priorityCustomers.length
       ? priorityCustomers.map(({ customer, risk }) => `- ${customer.company}：${risk.reason}`).join("\n")
       : "- 暂无明显风险。",
     "",
-    `4. 明日/下一步优先动作：${nextActions.length} 个。`,
+    `4. 日计划未闭环：${nextActions.length} 个。`,
     nextActions.length
       ? nextActions.map((task) => `- ${task.title}（${task.priority}，${customerName(data.customers, task.customerId)}）`).join("\n")
-      : "- 今日待办已闭环，明天优先补充新线索或复盘重点客户。",
+      : "- 日计划已闭环，明天优先补充新线索或复盘重点客户。",
     "",
     `5. 管道：总金额 ${money(metrics.totalAmount)}，加权预测 ${money(metrics.forecast)}，待回款 ${money(metrics.receivable)}。`,
   ].join("\n");
@@ -3760,7 +4047,7 @@ function customerRisk(customer, activities, tasks) {
   const overdueTask = openTasks.find((task) => task.dueDate && task.dueDate < today);
   const inactiveDays = daysSince(latestActivity?.date);
 
-  if (overdueTask) return { level: "risk", label: "超期", reason: `待办已过期：${overdueTask.title}` };
+  if (overdueTask) return { level: "risk", label: "超期", reason: `计划已过期：${overdueTask.title}` };
   if (["方案报价", "谈判中"].includes(customer.stage) && inactiveDays !== null && inactiveDays >= 7) {
     return { level: "risk", label: "停滞", reason: `${customer.stage} 已 ${inactiveDays} 天没有新跟进。` };
   }
@@ -3768,7 +4055,7 @@ function customerRisk(customer, activities, tasks) {
     return { level: "risk", label: "缺跟进", reason: "客户已推进，但还没有跟进记录。" };
   }
   if (customer.priority === "A" && !openTasks.length && customer.stage !== "已成交") {
-    return { level: "watch", label: "需动作", reason: "A 类客户没有下一步待办。" };
+    return { level: "watch", label: "需动作", reason: "A 类客户没有下一步计划。" };
   }
   if (inactiveDays !== null && inactiveDays >= 14 && customer.stage !== "已成交" && customer.stage !== "暂缓") {
     return { level: "watch", label: "久未联系", reason: `已 ${inactiveDays} 天没有新跟进。` };
@@ -3855,8 +4142,8 @@ function leadActionBody(customer, risk) {
   if (customer.priority === "D") return "先确认真实需求和时间点；没有明确项目就降低投入频率。";
   if (customer.stage === "新线索") return "建议今天确认联系人、核心痛点、预算大概区间和是否有下一次沟通。";
   if (customer.stage === "方案报价") return "不要只问看了吗，直接约 15 分钟复盘范围、价格和决策流程。";
-  if (customer.stage === "谈判中") return "问清楚还差什么才能签，并拆成具体待办和回款节点。";
-  return "把下一步动作写成待办，避免客户停在当前阶段。";
+  if (customer.stage === "谈判中") return "问清楚还差什么才能签，并拆成具体计划和回款节点。";
+  return "把下一步动作写成计划，避免客户停在当前阶段。";
 }
 
 function leadTaskTitle(customer, risk) {
@@ -3921,7 +4208,7 @@ function nextBestAction(customer, activities, tasks) {
   if (customer.stage === "新线索") return { title: "完成首次触达", body: "确认联系人、需求场景和是否有明确时间点。" };
   if (customer.stage === "需求确认") return { title: "锁定痛点与预算", body: "把痛点、预算、决策人和上线时间写进备注。" };
   if (customer.stage === "方案报价") return { title: "推动报价反馈", body: "约一次 15 分钟复盘，确认价格、方案范围和决策流程。" };
-  if (customer.stage === "谈判中") return { title: "明确成交条件", body: "问清楚还差什么才能签，拆成可执行待办推进。" };
+  if (customer.stage === "谈判中") return { title: "明确成交条件", body: "问清楚还差什么才能签，拆成可执行计划推进。" };
   return { title: "保持节奏", body: "继续沉淀跟进记录，确保每个客户都有明确下一步。" };
 }
 
@@ -3957,7 +4244,7 @@ function customerDealPlan(customer, activities, tasks) {
       谈判中: {
         focus: "锁定成交条件",
         method: "电话",
-        nextStep: "确认还差什么才能签，把合同、回款、试点范围拆成具体待办。",
+        nextStep: "确认还差什么才能签，把合同、回款、试点范围拆成具体计划。",
         questions: ["现在离签约还差哪一个条件？", "付款节点能否今天确认？", "如果我补齐材料，最快什么时候定？"],
       },
       已成交: {
