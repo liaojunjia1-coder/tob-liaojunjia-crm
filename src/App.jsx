@@ -94,8 +94,7 @@ const VIEWS = [
   { id: "followups", label: "跟进", icon: MessageSquare },
   { id: "tasks", label: "计划", icon: Bell },
   { id: "review", label: "复盘", icon: ClipboardList },
-  { id: "contracts", label: "合同回款", icon: HandCoins },
-  { id: "playbook", label: "销售工具", icon: BookOpen },
+  { id: "contracts", label: "合同与回款", icon: HandCoins },
 ];
 
 const emptyCustomer = {
@@ -358,6 +357,8 @@ const defaultData = {
       createdAt: "2026-06-20T12:00:00.000Z",
     },
   ],
+  contractFiles: [],
+  salesDiary: "",
   logs: [
     {
       id: "log-1",
@@ -410,6 +411,15 @@ function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") 
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("文件读取失败"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function toCsv(rows) {
@@ -479,6 +489,8 @@ function normalizeData(raw) {
       status: task.done ? "已完成" : task.status || "进行中",
     })),
     contracts: (source.contracts || []).map((contract) => ({ ...emptyContract, ...contract })),
+    contractFiles: source.contractFiles || [],
+    salesDiary: source.salesDiary || "",
     logs: source.logs || [],
     settings: { ...defaultSettings, ...(source.settings || {}) },
   };
@@ -545,6 +557,13 @@ function money(value) {
     currency: "CNY",
     maximumFractionDigits: 0,
   });
+}
+
+function formatFileSize(size) {
+  const number = Number(size || 0);
+  if (!number) return "未知大小";
+  if (number < 1024 * 1024) return `${Math.round(number / 1024)}KB`;
+  return `${(number / 1024 / 1024).toFixed(1)}MB`;
 }
 
 function customerName(customers, id) {
@@ -1156,7 +1175,8 @@ function App() {
       (sum, contract) => sum + Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0)),
       0,
     );
-    return { openTasks, overdueTasks, dayPlans, weekPlans, monthPlans, doneTasks, totalAmount, forecast, aCustomers, atRisk, receivable };
+    const fileCount = data.contractFiles.length;
+    return { openTasks, overdueTasks, dayPlans, weekPlans, monthPlans, doneTasks, totalAmount, forecast, aCustomers, atRisk, receivable, fileCount };
   }, [data]);
 
   const customerActivities = useMemo(
@@ -1526,6 +1546,66 @@ function App() {
     setTodoFilter("日计划");
   }
 
+  function saveSalesDiary(text) {
+    commit({ ...withLog(data, "日记", "更新销售日记"), salesDiary: text });
+    setSyncStatus("销售日记已保存");
+  }
+
+  function saveReviewAction(draft, customerId) {
+    const title = String(draft?.nextStep || "").trim();
+    if (!title) {
+      setSyncStatus("请先填写下一步动作");
+      return;
+    }
+    const nextTask = {
+      id: makeId("t"),
+      customerId: customerId || data.customers[0]?.id || "",
+      title,
+      dueDate: todayInputValue(),
+      priority: "高",
+      planType: "日计划",
+      status: "进行中",
+      done: false,
+      createdAt: new Date().toISOString(),
+    };
+    commit({ ...withLog(data, "复盘", `从销售复盘生成日计划：${title}`), tasks: [nextTask, ...data.tasks] });
+    setSyncStatus("已从复盘生成日计划");
+    setTodoFilter("日计划");
+  }
+
+  async function saveContractFiles(customerId, fileList) {
+    const files = [...(fileList || [])].filter(Boolean);
+    if (!files.length) return;
+    try {
+      const records = await Promise.all(
+        files.slice(0, 8).map(async (file) => ({
+          id: makeId("file"),
+          customerId: customerId || data.customers[0]?.id || "",
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          dataUrl: await readFileAsDataUrl(file),
+          note: "",
+          createdAt: new Date().toISOString(),
+        })),
+      );
+      commit({
+        ...withLog(data, "合同", `上传合同文件：${records.length} 个`),
+        contractFiles: [...records, ...data.contractFiles],
+      });
+      setSyncStatus(`已保存 ${records.length} 个文件`);
+    } catch (error) {
+      setSyncStatus(error.message || "文件保存失败");
+    }
+  }
+
+  function deleteContractFile(fileId) {
+    commit({
+      ...withLog(data, "合同", "删除合同文件"),
+      contractFiles: data.contractFiles.filter((file) => file.id !== fileId),
+    });
+  }
+
   function saveContract(event) {
     event.preventDefault();
     if (!contractForm.customerId || !contractForm.title.trim()) return;
@@ -1592,7 +1672,7 @@ function App() {
         <div className="brand">
           <div className="brand-mark">LJ</div>
           <div>
-            <h1>tob廖俊嘉</h1>
+            <h1>Tob廖俊嘉</h1>
             <p>个人销售中台</p>
           </div>
         </div>
@@ -1612,6 +1692,16 @@ function App() {
             );
           })}
         </nav>
+        <div className="sidebar-status">
+          <div>
+            <span>本机保存</span>
+            <strong>{syncStatus}</strong>
+          </div>
+          <div>
+            <span>备份</span>
+            <strong>{data.customers.length} 客户</strong>
+          </div>
+        </div>
       </aside>
 
       <main className="main">
@@ -1660,6 +1750,7 @@ function App() {
             onViewPipeline={() => go("pipeline")}
             onViewReview={() => go("review")}
             onViewTasks={() => go("tasks")}
+            onSaveSalesDiary={saveSalesDiary}
           />
         )}
 
@@ -1778,24 +1869,27 @@ function App() {
             onPlanFollowup={startPlannedFollowup}
             onToggleTask={toggleTask}
             onViewTasks={() => go("tasks")}
+            onSaveReviewAction={saveReviewAction}
           />
         )}
 
         {activeView === "contracts" && (
           <ContractsView
             contractForm={contractForm}
+            contractFiles={data.contractFiles}
             contracts={data.contracts}
             customers={data.customers}
             onContractChange={updateContract}
             onChange={setContractForm}
             onDelete={deleteContract}
+            onDeleteFile={deleteContractFile}
             onMarkPaid={markContractPaid}
             onSave={saveContract}
+            onUploadFiles={saveContractFiles}
           />
         )}
 
         {activeView === "playbook" && <PlaybookView />}
-
         {activeView === "settings" && (
           <SettingsView
             backupStatus={backupStatus}
@@ -1846,6 +1940,7 @@ function DashboardView({
   onViewPipeline,
   onViewReview,
   onViewTasks,
+  onSaveSalesDiary,
 }) {
   return (
     <section className="view">
@@ -1875,6 +1970,63 @@ function DashboardView({
           <ActivityLog logs={data.logs} />
         </section>
       </div>
+
+      <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
+
+      <div className="content-grid dashboard-bottom-grid">
+        <SalesDiaryCard diary={data.salesDiary} onSave={onSaveSalesDiary} />
+        <section className="surface dashboard-utility-grid">
+          <button className="utility-card" onClick={onViewCustomers} type="button">
+            <Users size={18} />
+            <span>客户健康度</span>
+            <strong>{Math.max(0, 100 - metrics.atRisk.length * 12)}</strong>
+            <small>{metrics.atRisk.length} 个高风险客户</small>
+          </button>
+          <button className="utility-card" onClick={onViewContracts} type="button">
+            <Upload size={18} />
+            <span>合同文件</span>
+            <strong>{metrics.fileCount}</strong>
+            <small>合同、照片、回款凭证</small>
+          </button>
+          <button className="utility-card" onClick={onViewReview} type="button">
+            <ClipboardList size={18} />
+            <span>复盘</span>
+            <strong>{data.activities.length}</strong>
+            <small>从真实跟进生成日报</small>
+          </button>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function SalesDiaryCard({ diary, onSave }) {
+  const [draft, setDraft] = useState(diary || "");
+
+  useEffect(() => {
+    setDraft(diary || "");
+  }, [diary]);
+
+  return (
+    <section className="surface sales-diary-card">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">销售日记</span>
+          <h3>记录今天的判断</h3>
+          <p>适合写拜访后的真实判断、客户情绪、价格异议和下一步想法。</p>
+        </div>
+        <button className="primary-button" onClick={() => onSave(draft)} type="button">
+          <Save size={17} />
+          保存
+        </button>
+      </div>
+      <textarea
+        className="diary-textarea"
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="例如：客户今天不是单纯嫌贵，而是担心内部审批慢。下次沟通先确认最终审批人和付款节点。"
+        rows="5"
+        value={draft}
+      />
     </section>
   );
 }
@@ -2253,10 +2405,16 @@ function CustomersView({
 
 function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, onStageChange, tasks }) {
   const [activeSource, setActiveSource] = useState("全部来源");
-  const [activeStatus, setActiveStatus] = useState("全部");
+  const [activeStatus, setActiveStatus] = useState("A类");
   const [selectedLeadId, setSelectedLeadId] = useState(customers[0]?.id || "");
-  const duplicates = duplicateCustomers(customers);
   const sourceStats = sourceSummary(customers);
+  const priorityStats = PRIORITIES.map((priority) => ({
+    priority,
+    count: customers.filter((customer) => customer.priority === priority).length,
+    amount: customers
+      .filter((customer) => customer.priority === priority)
+      .reduce((sum, customer) => sum + Number(customer.amount || 0), 0),
+  }));
   const leadItems = customers
     .map((customer) => ({
       customer,
@@ -2270,12 +2428,7 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
     );
   const filteredLeadItems = leadItems.filter(({ customer, risk }) => {
     const sourceOk = activeSource === "全部来源" || (customer.source || "未填写来源") === activeSource;
-    const statusOk =
-      activeStatus === "全部" ||
-      (activeStatus === "高风险" && risk.level === "risk") ||
-      (activeStatus === "需动作" && risk.level === "watch") ||
-      (activeStatus === "A类" && customer.priority === "A") ||
-      (activeStatus === "D类" && customer.priority === "D");
+    const statusOk = `${customer.priority}类` === activeStatus;
     return sourceOk && statusOk;
   });
   const selectedLead =
@@ -2324,15 +2477,20 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
         </section>
 
         <section className="surface">
-          <SectionHeader title="撞单检查" icon={ShieldCheck} />
-          <div className="duplicate-list">
-            {duplicates.map((group) => (
-              <article className="duplicate-card" key={group.key}>
-                <strong>{group.label}</strong>
-                <span>{group.items.map((item) => item.company).join(" / ")}</span>
-              </article>
+          <SectionHeader title="线索分层" icon={ShieldCheck} />
+          <div className="lead-grade-grid">
+            {priorityStats.map((item) => (
+              <button
+                className={activeStatus === `${item.priority}类` ? `lead-grade-card active priority-card-${item.priority.toLowerCase()}` : `lead-grade-card priority-card-${item.priority.toLowerCase()}`}
+                key={item.priority}
+                onClick={() => setActiveStatus(`${item.priority}类`)}
+                type="button"
+              >
+                <span className={`priority-label priority-label-${item.priority.toLowerCase()}`}>{item.priority}类</span>
+                <strong>{item.count}</strong>
+                <small>{money(item.amount)} 管道金额</small>
+              </button>
             ))}
-            {duplicates.length === 0 && <EmptyState text="目前没有明显重复客户" />}
           </div>
         </section>
       </div>
@@ -2344,7 +2502,7 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
             <p>先筛选，再点线索查看建议动作。</p>
           </div>
           <div className="segmented lead-filter">
-            {["全部", "高风险", "需动作", "A类", "D类"].map((item) => (
+            {["A类", "B类", "C类", "D类"].map((item) => (
               <button className={activeStatus === item ? "active" : ""} key={item} onClick={() => setActiveStatus(item)} type="button">
                 {item}
               </button>
@@ -2418,8 +2576,21 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
     </section>
   );
 }
-function ContractsView({ contractForm, contracts, customers, onChange, onContractChange, onDelete, onMarkPaid, onSave }) {
+function ContractsView({
+  contractFiles,
+  contractForm,
+  contracts,
+  customers,
+  onChange,
+  onContractChange,
+  onDelete,
+  onDeleteFile,
+  onMarkPaid,
+  onSave,
+  onUploadFiles,
+}) {
   const [showContractForm, setShowContractForm] = useState(false);
+  const [fileCustomerId, setFileCustomerId] = useState(customers[0]?.id || "");
   const sortedContracts = [...contracts].sort((a, b) => String(a.paymentDue || "").localeCompare(String(b.paymentDue || "")));
   const receivable = contracts.reduce(
     (sum, contract) => sum + Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0)),
@@ -2437,60 +2608,123 @@ function ContractsView({ contractForm, contracts, customers, onChange, onContrac
         <Metric title="合同数量" value={contracts.length} detail="已记录合同/报价" />
         <Metric title="应收余额" value={money(receivable)} detail="合同金额减已回款" />
         <Metric title="逾期回款" value={overdue.length} detail="需要今天处理" />
-        <Metric title="已回款合同" value={contracts.filter((contract) => contract.status === "已回款").length} detail="完成收款闭环" />
+        <Metric title="合同文件" value={contractFiles.length} detail="合同、照片、凭证" />
       </div>
 
-      <section className="surface">
-        <div className="panel-heading">
-          <h3>回款清单</h3>
-          <button className="primary-button" onClick={() => setShowContractForm(true)} type="button">
-            <Plus size={17} />
-            新增合同
-          </button>
-        </div>
-        <div className="contract-list">
-          {sortedContracts.map((contract) => {
-            const balance = Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0));
-            const isOverdue = contract.paymentDue && contract.paymentDue < todayInputValue() && contract.status !== "已回款";
-            return (
-              <article className={isOverdue ? "contract-card overdue" : "contract-card"} key={contract.id}>
+      <div className="content-grid contract-workspace">
+        <section className="surface">
+          <div className="panel-heading">
+            <div>
+              <h3>合同与回款清单</h3>
+              <p>先看合同和回款状态，新增合同用右上角按钮打开。</p>
+            </div>
+            <button className="primary-button" onClick={() => setShowContractForm(true)} type="button">
+              <Plus size={17} />
+              新增合同
+            </button>
+          </div>
+          <div className="contract-list">
+            {sortedContracts.map((contract) => {
+              const balance = Math.max(0, Number(contract.amount || 0) - Number(contract.paidAmount || 0));
+              const isOverdue = contract.paymentDue && contract.paymentDue < todayInputValue() && contract.status !== "已回款";
+              return (
+                <article className={isOverdue ? "contract-card overdue" : "contract-card"} key={contract.id}>
+                  <div>
+                    <span className="contract-status">{contract.status}</span>
+                    <strong>{contract.title}</strong>
+                    <small>{customerName(customers, contract.customerId)} · {contract.contractNo || "未填编号"}</small>
+                  </div>
+                  <div className="contract-money">
+                    <strong>{money(balance)}</strong>
+                    <small>待回款 / {contract.paymentDue || "未设日期"}</small>
+                  </div>
+                  <div className="contract-inline-actions">
+                    <select onChange={(event) => onContractChange(contract.id, { status: event.target.value })} value={contract.status}>
+                      {CONTRACT_STATUS.map((status) => (
+                        <option key={status}>{status}</option>
+                      ))}
+                    </select>
+                    <button className="secondary-button" onClick={() => onMarkPaid(contract.id)} type="button">
+                      <Check size={16} />
+                      已回款
+                    </button>
+                  </div>
+                  <button className="icon-button danger" onClick={() => onDelete(contract.id)} title="删除合同" type="button">
+                    <Trash2 size={17} />
+                  </button>
+                </article>
+              );
+            })}
+            {sortedContracts.length === 0 && (
+              <div className="empty-action">
+                <strong>还没有合同或回款记录</strong>
+                <button className="secondary-button" onClick={() => setShowContractForm(true)} type="button">
+                  <Plus size={17} />
+                  新增第一条合同
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="surface contract-file-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>合同文件</h3>
+              <p>支持合同、报价单、付款截图、拜访照片。本地保存，适合演示和公司材料对接。</p>
+            </div>
+            <select onChange={(event) => setFileCustomerId(event.target.value)} value={fileCustomerId}>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.company}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label
+            className="file-dropzone"
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              onUploadFiles(fileCustomerId, event.dataTransfer.files);
+            }}
+          >
+            <Upload size={28} />
+            <strong>拖入合同、图片或付款凭证</strong>
+            <span>也可以点击选择文件。文件会挂到当前选择的客户。</span>
+            <input
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+              multiple
+              onChange={(event) => {
+                onUploadFiles(fileCustomerId, event.target.files);
+                event.target.value = "";
+              }}
+              type="file"
+            />
+          </label>
+          <div className="contract-file-list">
+            {contractFiles.map((file) => (
+              <article className="contract-file-row" key={file.id}>
                 <div>
-                  <span className="contract-status">{contract.status}</span>
-                  <strong>{contract.title}</strong>
-                  <small>{customerName(customers, contract.customerId)} · {contract.contractNo || "未填编号"}</small>
+                  <strong>{file.name}</strong>
+                  <small>
+                    {customerName(customers, file.customerId)} · {formatFileSize(file.size)} · {String(file.createdAt || "").slice(0, 10)}
+                  </small>
                 </div>
-                <div className="contract-money">
-                  <strong>{money(balance)}</strong>
-                  <small>待回款 / {contract.paymentDue || "未设日期"}</small>
-                </div>
-                <div className="contract-inline-actions">
-                  <select onChange={(event) => onContractChange(contract.id, { status: event.target.value })} value={contract.status}>
-                    {CONTRACT_STATUS.map((status) => (
-                      <option key={status}>{status}</option>
-                    ))}
-                  </select>
-                  <button className="secondary-button" onClick={() => onMarkPaid(contract.id)} type="button">
-                    <Check size={16} />
-                    已回款
+                <div className="contract-file-actions">
+                  <a className="ghost-button" download={file.name} href={file.dataUrl}>
+                    下载
+                  </a>
+                  <button className="icon-button danger" onClick={() => onDeleteFile(file.id)} title="删除文件" type="button">
+                    <Trash2 size={16} />
                   </button>
                 </div>
-                <button className="icon-button danger" onClick={() => onDelete(contract.id)} title="删除合同" type="button">
-                  <Trash2 size={17} />
-                </button>
               </article>
-            );
-          })}
-          {sortedContracts.length === 0 && (
-            <div className="empty-action">
-              <strong>还没有合同或回款记录</strong>
-              <button className="secondary-button" onClick={() => setShowContractForm(true)} type="button">
-                <Plus size={17} />
-                新增第一条合同
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
+            ))}
+            {contractFiles.length === 0 && <EmptyState text="还没有上传合同、图片或回款凭证" />}
+          </div>
+        </section>
+      </div>
 
       {showContractForm && (
         <div className="drawer-backdrop">
@@ -3082,10 +3316,23 @@ function ReviewView({
   onGeneratePlan,
   onPickCustomer,
   onPlanFollowup,
+  onSaveReviewAction,
   onToggleTask,
   onViewTasks,
 }) {
   const review = salesReview(data, metrics);
+  const [reviewDraft, setReviewDraft] = useState(loadReviewDraft);
+  const [reviewCustomerId, setReviewCustomerId] = useState(data.customers[0]?.id || "");
+
+  useEffect(() => {
+    if (!reviewCustomerId && data.customers[0]?.id) setReviewCustomerId(data.customers[0].id);
+  }, [data.customers, reviewCustomerId]);
+
+  function updateReviewDraft(field, value) {
+    const nextDraft = { ...reviewDraft, [field]: value };
+    setReviewDraft(nextDraft);
+    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
+  }
 
   return (
     <section className="view">
@@ -3099,8 +3346,8 @@ function ReviewView({
       <section className="surface report-hero">
         <div>
           <span className="eyebrow">日报复盘</span>
-          <h3>把今天的销售动作整理成可复制日报</h3>
-          <p>自动汇总跟进、日计划完成情况、风险客户和下一步动作，减少手工写日报的时间。</p>
+          <h3>日报只引用真实数据</h3>
+          <p>来源包括今日跟进、已完成日计划、未闭环动作、风险客户和合同回款，不凭空生成内容。</p>
         </div>
         <div className="report-actions">
           <button className="primary-button" onClick={() => onCopy(review.reportText)} type="button">
@@ -3116,7 +3363,15 @@ function ReviewView({
 
       <div className="content-grid review-grid">
         <section className="surface">
-          <SectionHeader title="日报内容" icon={ClipboardList} />
+          <div className="panel-heading">
+            <div>
+              <h3>日报内容</h3>
+              <p>
+                数据来源：今日跟进 {review.todayActivities.length} 条，今日完成 {review.doneToday.length} 个，未闭环 {review.openToday.length} 个，合同待回款 {money(metrics.receivable)}。
+              </p>
+            </div>
+            <ClipboardList size={18} />
+          </div>
           <pre className="report-text">{review.reportText}</pre>
         </section>
 
@@ -3152,6 +3407,91 @@ function ReviewView({
               </article>
             ))}
             {review.priorityCustomers.length === 0 && <EmptyState text="暂无需要处理的风险客户" />}
+          </div>
+        </section>
+      </div>
+
+      <div className="content-grid review-grid">
+        <section className="surface manual-review-card">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">手写销售复盘</span>
+              <h3>把真实判断沉淀成动作</h3>
+              <p>你可以手动写复盘，下一步动作可以直接生成日计划。</p>
+            </div>
+            <select onChange={(event) => setReviewCustomerId(event.target.value)} value={reviewCustomerId}>
+              {data.customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.company}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="review-form">
+            <label>
+              本次沟通结论
+              <textarea
+                onChange={(event) => updateReviewDraft("conclusion", event.target.value)}
+                placeholder="客户真正关心什么？本次聊清楚了什么？"
+                rows="3"
+                value={reviewDraft.conclusion}
+              />
+            </label>
+            <label>
+              推进阻力
+              <textarea
+                onChange={(event) => updateReviewDraft("blocker", event.target.value)}
+                placeholder="预算、时机、竞品、决策链，哪一项卡住？"
+                rows="3"
+                value={reviewDraft.blocker}
+              />
+            </label>
+            <label>
+              下一步动作
+              <textarea
+                onChange={(event) => updateReviewDraft("nextStep", event.target.value)}
+                placeholder="写成可以执行的一句话，例如：明天确认最终审批人和付款节点。"
+                rows="3"
+                value={reviewDraft.nextStep}
+              />
+            </label>
+            <label>
+              能力复盘
+              <textarea
+                onChange={(event) => updateReviewDraft("ability", event.target.value)}
+                placeholder="开场、需求挖掘、价值传递、异议处理、成交推动，各扣分在哪里？"
+                rows="3"
+                value={reviewDraft.ability}
+              />
+            </label>
+          </div>
+          <div className="form-actions">
+            <button className="secondary-button" onClick={() => onGeneratePlan()} type="button">
+              <Bell size={17} />
+              补全今日计划
+            </button>
+            <button className="primary-button" onClick={() => onSaveReviewAction(reviewDraft, reviewCustomerId)} type="button">
+              <Save size={17} />
+              下一步写入日计划
+            </button>
+          </div>
+        </section>
+
+        <section className="surface">
+          <SectionHeader title="复盘提示" icon={Sparkles} />
+          <div className="review-source-list">
+            <article>
+              <strong>日报不会乱编</strong>
+              <span>如果今天没有跟进或计划完成记录，日报会提示“暂无”，不会假装有动作。</span>
+            </article>
+            <article>
+              <strong>复盘可以变成计划</strong>
+              <span>手写“下一步动作”后，可以直接写入日计划，并关联到客户。</span>
+            </article>
+            <article>
+              <strong>风险客户会单独列出</strong>
+              <span>超期、久未联系、A 类无下一步的客户，会进入风险闭环。</span>
+            </article>
           </div>
         </section>
       </div>
@@ -3387,7 +3727,7 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
         <div className="auth-brand">
           <div className="brand-mark">LJ</div>
           <div>
-            <h1>tob廖俊嘉</h1>
+            <h1>Tob廖俊嘉</h1>
             <p>本机保存客户、跟进和计划，打开即可使用。</p>
           </div>
         </div>
@@ -3920,8 +4260,7 @@ function viewTitle(view) {
     followups: "跟进记录",
     tasks: "计划中心",
     review: "销售复盘",
-    contracts: "合同回款",
-    playbook: "销售工具",
+    contracts: "合同与回款",
     settings: "设置与个人中心",
   }[view];
 }
@@ -3935,8 +4274,7 @@ function viewSubtitle(view) {
     followups: "每次沟通都留下结论和下一步动作。",
     tasks: "按日、周、月管理销售动作。",
     review: "自动生成日报，检查今天动作是否闭环。",
-    contracts: "记录合同金额、回款节点和逾期风险。",
-    playbook: "用录音转写做诊断，结合 SPIN 和 Sales Skill 提升每次沟通质量。",
+    contracts: "记录合同金额、回款节点、合同文件和现场照片。",
     settings: "账号、密码、提醒和数据偏好都在这里。",
   }[view];
 }
