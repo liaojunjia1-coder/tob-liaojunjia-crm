@@ -48,6 +48,7 @@ const USER_KEY = "sales-crm-user-v2";
 const REMEMBER_KEY = "sales-crm-remember-v1";
 const REVIEW_DRAFT_KEY = "sales-crm-review-draft-v1";
 const FORM_DRAFT_PREFIX = "sales-crm-form-draft-v1";
+const SAMPLE_DATA_VERSION = 2;
 const STATIC_LOCAL_MODE = import.meta.env.VITE_STATIC_LOCAL_MODE === "true";
 
 const STAGES = [
@@ -134,7 +135,21 @@ const defaultSettings = {
   aiMode: "实用销售参谋",
 };
 
+const SAMPLE_CUSTOMER_AMOUNTS = {
+  "c-1": "520000",
+  "c-2": "360000",
+  "c-3": "480000",
+  "c-4": "320000",
+  "c-5": "600000",
+};
+
+const SAMPLE_CONTRACT_AMOUNTS = {
+  "ct-1": { amount: "600000", paidAmount: "180000" },
+  "ct-2": { amount: "360000", paidAmount: "0" },
+};
+
 const defaultData = {
+  sampleDataVersion: SAMPLE_DATA_VERSION,
   customers: [
     {
       id: "c-1",
@@ -143,7 +158,7 @@ const defaultData = {
       phone: "138-0000-1001",
       industry: "工业自动化",
       stage: "方案报价",
-      amount: "260000",
+      amount: "520000",
       priority: "A",
       source: "老客户转介绍",
       recordedAt: "2026-06-14",
@@ -161,7 +176,7 @@ const defaultData = {
       phone: "微信 zhou-sales",
       industry: "外贸 SaaS",
       stage: "方案报价",
-      amount: "88000",
+      amount: "360000",
       priority: "A",
       source: "展会线索",
       recordedAt: "2026-06-14",
@@ -179,7 +194,7 @@ const defaultData = {
       phone: "0755-8888-2233",
       industry: "制造业",
       stage: "需求确认",
-      amount: "150000",
+      amount: "480000",
       priority: "B",
       source: "自拓",
       recordedAt: "2026-06-14",
@@ -197,7 +212,7 @@ const defaultData = {
       phone: "微信 euro-li",
       industry: "外贸制造",
       stage: "已联系",
-      amount: "56000",
+      amount: "320000",
       priority: "B",
       source: "LinkedIn 开发",
       recordedAt: "2026-06-16",
@@ -215,7 +230,7 @@ const defaultData = {
       phone: "136-0000-2299",
       industry: "SaaS / 企业服务",
       stage: "谈判中",
-      amount: "128000",
+      amount: "600000",
       priority: "A",
       source: "朋友介绍",
       recordedAt: "2026-06-17",
@@ -336,12 +351,12 @@ const defaultData = {
       customerId: "c-5",
       title: "销售过程试点服务合同",
       contractNo: "TOB-202606-001",
-      amount: "128000",
-      paidAmount: "30000",
+      amount: "600000",
+      paidAmount: "180000",
       status: "部分回款",
       signDate: "2026-06-21",
       paymentDue: "2026-06-28",
-      note: "首款已收，尾款在试点复盘后确认。",
+      note: "首款已收 18 万，尾款在试点复盘后确认。",
       createdAt: "2026-06-21T16:30:00.000Z",
     },
     {
@@ -349,7 +364,7 @@ const defaultData = {
       customerId: "c-2",
       title: "外贸询盘管理试用报价",
       contractNo: "TOB-202606-002",
-      amount: "88000",
+      amount: "360000",
       paidAmount: "0",
       status: "合同审核",
       signDate: "",
@@ -539,10 +554,15 @@ function stageMeta(stage) {
 
 function normalizeData(raw) {
   const source = raw && typeof raw === "object" ? raw : defaultData;
+  const migrateSampleAmounts = Number(source.sampleDataVersion || 0) < SAMPLE_DATA_VERSION;
   return {
+    sampleDataVersion: SAMPLE_DATA_VERSION,
     customers: (source.customers || []).map((customer) => ({
       ...emptyCustomer,
       ...customer,
+      amount: migrateSampleAmounts && SAMPLE_CUSTOMER_AMOUNTS[customer.id]
+        ? SAMPLE_CUSTOMER_AMOUNTS[customer.id]
+        : customer.amount,
       recordedAt: customer.recordedAt || customer.closeDate || todayInputValue(),
     })),
     activities: source.activities || [],
@@ -555,6 +575,9 @@ function normalizeData(raw) {
     contracts: (source.contracts || []).map((contract) => ({
       ...emptyContract,
       ...contract,
+      ...(migrateSampleAmounts && SAMPLE_CONTRACT_AMOUNTS[contract.id]
+        ? SAMPLE_CONTRACT_AMOUNTS[contract.id]
+        : {}),
       contractNo: String(contract.contractNo || "").replace(/^LJ-/, "TOB-"),
     })),
     contractFiles: source.contractFiles || [],
