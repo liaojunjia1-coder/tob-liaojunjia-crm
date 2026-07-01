@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -47,6 +47,7 @@ const TOKEN_KEY = "sales-crm-token-v2";
 const USER_KEY = "sales-crm-user-v2";
 const REMEMBER_KEY = "sales-crm-remember-v1";
 const REVIEW_DRAFT_KEY = "sales-crm-review-draft-v1";
+const FORM_DRAFT_PREFIX = "sales-crm-form-draft-v1";
 const STATIC_LOCAL_MODE = import.meta.env.VITE_STATIC_LOCAL_MODE === "true";
 
 const STAGES = [
@@ -386,10 +387,20 @@ function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function dedupeLogs(logs = []) {
+  const seen = new Set();
+  return logs.filter((log) => {
+    const key = `${log.type || ""}|${log.text || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 30);
+}
+
 function withLog(data, type, text) {
   return {
     ...data,
-    logs: [
+    logs: dedupeLogs([
       {
         id: makeId("log"),
         type,
@@ -397,8 +408,61 @@ function withLog(data, type, text) {
         createdAt: new Date().toISOString(),
       },
       ...(data.logs || []),
-    ].slice(0, 30),
+    ]),
   };
+}
+
+function formDraftKey(key) {
+  return `${FORM_DRAFT_PREFIX}:${key}`;
+}
+
+function loadFormDraft(key, fallback) {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(formDraftKey(key)));
+    if (saved && typeof saved === "object" && !Array.isArray(saved) && fallback && typeof fallback === "object") {
+      return { ...fallback, ...saved };
+    }
+    return saved ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveFormDraft(key, value) {
+  window.localStorage.setItem(formDraftKey(key), JSON.stringify(value));
+}
+
+function clearFormDraft(key) {
+  window.localStorage.removeItem(formDraftKey(key));
+}
+
+function useStoredDraft(key, initialValue) {
+  const initialRef = useRef();
+  if (initialRef.current === undefined) {
+    initialRef.current = typeof initialValue === "function" ? initialValue() : initialValue;
+  }
+  const skipNextSave = useRef(false);
+  const [value, setValue] = useState(() => loadFormDraft(key, initialRef.current));
+
+  useEffect(() => {
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
+    saveFormDraft(key, value);
+  }, [key, value]);
+
+  function resetDraft(nextValue = initialRef.current) {
+    clearFormDraft(key);
+    if (Object.is(value, nextValue)) {
+      skipNextSave.current = false;
+      return;
+    }
+    skipNextSave.current = true;
+    setValue(nextValue);
+  }
+
+  return [value, setValue, resetDraft];
 }
 
 function downloadTextFile(filename, content, type = "text/plain;charset=utf-8") {
@@ -491,7 +555,7 @@ function normalizeData(raw) {
     contracts: (source.contracts || []).map((contract) => ({ ...emptyContract, ...contract })),
     contractFiles: source.contractFiles || [],
     salesDiary: source.salesDiary || "",
-    logs: source.logs || [],
+    logs: dedupeLogs(source.logs || []),
     settings: { ...defaultSettings, ...(source.settings || {}) },
   };
 }
@@ -627,7 +691,7 @@ function App() {
   const [aiInsight, setAiInsight] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [followupAi, setFollowupAi] = useState(null);
-  const [activityForm, setActivityForm] = useState({
+  const [activityForm, setActivityForm, clearActivityDraft] = useStoredDraft("followup", () => ({
     customerId: "",
     method: "电话",
     date: todayInputValue(),
@@ -636,19 +700,19 @@ function App() {
     makeTask: true,
     taskDueDate: todayInputValue(),
     taskPriority: "中",
-  });
-  const [taskForm, setTaskForm] = useState({
+  }));
+  const [taskForm, setTaskForm, clearTaskDraft] = useStoredDraft("task", () => ({
     customerId: "",
     title: "",
     dueDate: todayInputValue(),
     priority: defaultSettings.defaultTaskPriority,
     planType: "日计划",
     status: "进行中",
-  });
-  const [contractForm, setContractForm] = useState({
+  }));
+  const [contractForm, setContractForm, clearContractDraft] = useStoredDraft("contract", () => ({
     ...emptyContract,
     paymentDue: todayInputValue(),
-  });
+  }));
 
   useEffect(() => {
     const handleInstallPrompt = (event) => {
@@ -1185,17 +1249,23 @@ function App() {
   );
 
   function openNewCustomerForm() {
+    const fallback = { ...emptyCustomer, recordedAt: todayInputValue() };
     setEditingCustomerId("");
-    setCustomerForm({ ...emptyCustomer, recordedAt: todayInputValue() });
+    setCustomerForm(loadFormDraft("customer:new", fallback));
     setShowCustomerForm(true);
     setActiveView("customers");
   }
 
   function openEditCustomerForm(customer) {
     setEditingCustomerId(customer.id);
-    setCustomerForm({ ...emptyCustomer, ...customer });
+    setCustomerForm(loadFormDraft(`customer:${customer.id}`, { ...emptyCustomer, ...customer }));
     setShowCustomerForm(true);
     setActiveView("customers");
+  }
+
+  function changeCustomerForm(nextForm) {
+    setCustomerForm(nextForm);
+    saveFormDraft(`customer:${editingCustomerId || "new"}`, nextForm);
   }
 
   function saveCustomer(event) {
@@ -1233,6 +1303,7 @@ function App() {
       setContractForm((form) => ({ ...form, customerId: nextCustomer.id }));
     }
 
+    clearFormDraft(`customer:${editingCustomerId || "new"}`);
     setShowCustomerForm(false);
     setCustomerForm(emptyCustomer);
     setEditingCustomerId("");
@@ -1338,13 +1409,13 @@ function App() {
       tasks: nextTasks,
     });
     setSelectedCustomerId(activityForm.customerId);
-    setActivityForm((form) => ({
-      ...form,
+    clearActivityDraft({
+      ...activityForm,
       content: "",
       nextStep: "",
       taskDueDate: todayInputValue(),
       taskPriority: data.settings.defaultTaskPriority || "中",
-    }));
+    });
     setFollowupAi(null);
     go("customers");
   }
@@ -1363,7 +1434,7 @@ function App() {
       createdAt: new Date().toISOString(),
     };
     commit({ ...withLog(data, "计划", `新增计划：${nextTask.title}`), tasks: [nextTask, ...data.tasks] });
-    setTaskForm((form) => ({ ...form, title: "" }));
+    clearTaskDraft({ ...taskForm, title: "" });
     go("tasks");
   }
 
@@ -1460,8 +1531,17 @@ function App() {
 
   function saveCustomerPlan(customerId, draft) {
     const customer = data.customers.find((item) => item.id === customerId);
-    if (!customer || !draft.nextStep.trim()) return;
+    if (!customer || !draft.nextStep.trim()) return false;
     const nextData = withLog(data, "计划", `保存推进计划：${customer.company}`);
+    const savedPlan = {
+      nextStep: draft.nextStep.trim(),
+      method: draft.method,
+      dueDate: draft.dueDate || todayInputValue(),
+      priority: draft.priority || "中",
+      status: draft.status || "进行中",
+      planType: draft.planType || "不加入计划",
+      updatedAt: new Date().toISOString(),
+    };
     const nextTasks =
       draft.planType === "不加入计划"
         ? data.tasks
@@ -1480,8 +1560,13 @@ function App() {
             },
             ...data.tasks,
           ];
-    commit({ ...nextData, tasks: nextTasks });
+    commit({
+      ...nextData,
+      customers: data.customers.map((item) => (item.id === customerId ? { ...item, dealPlan: savedPlan } : item)),
+      tasks: nextTasks,
+    });
     setSyncStatus(draft.planType === "不加入计划" ? "推进计划已保存" : `已加入${draft.planType}`);
+    return true;
   }
 
   function createLeadFollowTask(customerId) {
@@ -1555,7 +1640,7 @@ function App() {
     const title = String(draft?.nextStep || "").trim();
     if (!title) {
       setSyncStatus("请先填写下一步动作");
-      return;
+      return false;
     }
     const nextTask = {
       id: makeId("t"),
@@ -1571,6 +1656,7 @@ function App() {
     commit({ ...withLog(data, "复盘", `从销售复盘生成日计划：${title}`), tasks: [nextTask, ...data.tasks] });
     setSyncStatus("已从复盘生成日计划");
     setTodoFilter("日计划");
+    return true;
   }
 
   async function saveContractFiles(customerId, fileList) {
@@ -1620,11 +1706,11 @@ function App() {
       createdAt: new Date().toISOString(),
     };
     commit({ ...withLog(data, "合同", `新增合同：${nextContract.title}`), contracts: [nextContract, ...data.contracts] });
-    setContractForm((form) => ({
+    clearContractDraft({
       ...emptyContract,
-      customerId: form.customerId,
+      customerId: contractForm.customerId,
       paymentDue: todayInputValue(),
-    }));
+    });
     go("contracts");
   }
 
@@ -1777,14 +1863,9 @@ function App() {
             data={data}
             onAnalyze={analyzeCustomer}
             onCopyPlan={copyCustomerPlan}
-            onCreateTask={createLeadFollowTask}
             onDelete={deleteCustomer}
             onEdit={openEditCustomerForm}
             onFieldChange={updateCustomerField}
-            onNewFollow={() => {
-              setActivityForm((form) => ({ ...form, customerId: selectedCustomer.id }));
-              go("followups");
-            }}
             onPickCustomer={setSelectedCustomerId}
             onPlanFollowup={startPlannedFollowup}
             onSavePlan={saveCustomerPlan}
@@ -1859,7 +1940,6 @@ function App() {
             data={data}
             metrics={metrics}
             onCopy={copyReport}
-            onCopyPlan={copyCustomerPlan}
             onCreateTask={createLeadFollowTask}
             onGeneratePlan={generateDailyPlan}
             onPickCustomer={(id) => {
@@ -1919,7 +1999,7 @@ function App() {
           <CustomerForm
             customerForm={customerForm}
             editing={Boolean(editingCustomerId)}
-            onChange={setCustomerForm}
+            onChange={changeCustomerForm}
             onClose={() => setShowCustomerForm(false)}
             onSubmit={saveCustomer}
           />
@@ -2001,11 +2081,16 @@ function DashboardView({
 }
 
 function SalesDiaryCard({ diary, onSave }) {
-  const [draft, setDraft] = useState(diary || "");
+  const [draft, setDraft, clearDraft] = useStoredDraft("sales-diary", diary || "");
 
   useEffect(() => {
-    setDraft(diary || "");
-  }, [diary]);
+    if (!draft && diary) setDraft(diary);
+  }, [diary, draft, setDraft]);
+
+  function saveDiary() {
+    onSave(draft);
+    clearDraft(draft);
+  }
 
   return (
     <section className="surface sales-diary-card">
@@ -2015,7 +2100,7 @@ function SalesDiaryCard({ diary, onSave }) {
           <h3>记录今天的判断</h3>
           <p>适合写拜访后的真实判断、客户情绪、价格异议和下一步想法。</p>
         </div>
-        <button className="primary-button" onClick={() => onSave(draft)} type="button">
+        <button className="primary-button" onClick={saveDiary} type="button">
           <Save size={17} />
           保存
         </button>
@@ -2288,11 +2373,9 @@ function CustomersView({
   data,
   onAnalyze,
   onCopyPlan,
-  onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
-  onNewFollow,
   onPickCustomer,
   onPlanFollowup,
   onSavePlan,
@@ -2385,11 +2468,9 @@ function CustomersView({
               customers={data.customers}
               onAnalyze={onAnalyze}
               onCopyPlan={onCopyPlan}
-              onCreateTask={onCreateTask}
               onDelete={onDelete}
               onEdit={onEdit}
               onFieldChange={onFieldChange}
-              onNewFollow={onNewFollow}
               onPlanFollowup={onPlanFollowup}
               onSavePlan={onSavePlan}
               tasks={data.tasks}
@@ -2499,14 +2580,7 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
         <div className="panel-heading">
           <div>
             <h3>线索工作台</h3>
-            <p>先筛选，再点线索查看建议动作。</p>
-          </div>
-          <div className="segmented lead-filter">
-            {["A类", "B类", "C类", "D类"].map((item) => (
-              <button className={activeStatus === item ? "active" : ""} key={item} onClick={() => setActiveStatus(item)} type="button">
-                {item}
-              </button>
-            ))}
+            <p>上方分层卡片已是筛选入口，点线索后直接处理。</p>
           </div>
         </div>
         <div className="lead-workbench">
@@ -3311,7 +3385,6 @@ function ReviewView({
   data,
   metrics,
   onCopy,
-  onCopyPlan,
   onCreateTask,
   onGeneratePlan,
   onPickCustomer,
@@ -3332,6 +3405,13 @@ function ReviewView({
     const nextDraft = { ...reviewDraft, [field]: value };
     setReviewDraft(nextDraft);
     window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
+  }
+
+  function saveReviewPlan() {
+    if (!onSaveReviewAction(reviewDraft, reviewCustomerId)) return;
+    const emptyDraft = emptyReviewDraft();
+    setReviewDraft(emptyDraft);
+    window.localStorage.removeItem(REVIEW_DRAFT_KEY);
   }
 
   return (
@@ -3397,10 +3477,6 @@ function ReviewView({
                   </button>
                   <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
                     <Bell size={15} />
-                    计划
-                  </button>
-                  <button className="ghost-button" onClick={() => onCopyPlan(customer.id)} type="button">
-                    <ClipboardList size={15} />
                     计划
                   </button>
                 </div>
@@ -3470,7 +3546,7 @@ function ReviewView({
               <Bell size={17} />
               补全今日计划
             </button>
-            <button className="primary-button" onClick={() => onSaveReviewAction(reviewDraft, reviewCustomerId)} type="button">
+            <button className="primary-button" onClick={saveReviewPlan} type="button">
               <Save size={17} />
               下一步写入日计划
             </button>
@@ -3877,39 +3953,45 @@ function CustomerDetail({
   customers,
   onAnalyze,
   onCopyPlan,
-  onCreateTask,
   onDelete,
   onEdit,
   onFieldChange,
-  onNewFollow,
   onPlanFollowup,
   onSavePlan,
   tasks,
 }) {
-  const [detailTab, setDetailTab] = useState("基本信息");
+  const [detailTab, setDetailTab] = useState("客户资料");
   const risk = customerRisk(customer, activities, tasks);
   const recommendation = nextBestAction(customer, activities, tasks);
   const completeness = customerCompleteness(customer);
   const plan = customerDealPlan(customer, activities, tasks);
-  const [planDraft, setPlanDraft] = useState(() => ({
+  const planDraftKey = `customer-plan:${customer.id}`;
+  const defaultPlanDraft = () => ({
     nextStep: plan.nextStep,
     method: plan.method,
-    dueDate: todayInputValue(),
+    dueDate: plan.dueDate || todayInputValue(),
     priority: plan.priority,
-    status: "进行中",
-    planType: "不加入计划",
-  }));
+    status: plan.status || "进行中",
+    planType: plan.planType || "不加入计划",
+  });
+  const [planDraft, setPlanDraft] = useState(() => loadFormDraft(planDraftKey, defaultPlanDraft()));
 
   useEffect(() => {
-    setPlanDraft({
-      nextStep: plan.nextStep,
-      method: plan.method,
-      dueDate: todayInputValue(),
-      priority: plan.priority,
-      status: "进行中",
-      planType: "不加入计划",
+    setPlanDraft(loadFormDraft(planDraftKey, defaultPlanDraft()));
+  }, [customer.id]);
+
+  function updatePlanDraft(patch) {
+    setPlanDraft((current) => {
+      const nextDraft = { ...current, ...patch };
+      saveFormDraft(planDraftKey, nextDraft);
+      return nextDraft;
     });
-  }, [customer.id, plan.method, plan.nextStep, plan.priority]);
+  }
+
+  function savePlan() {
+    if (!onSavePlan(customer.id, planDraft)) return;
+    clearFormDraft(planDraftKey);
+  }
 
   return (
     <>
@@ -3930,14 +4012,14 @@ function CustomerDetail({
       </div>
 
       <div className="segmented detail-tabs">
-        {["基本信息", "商机详情", "跟进动态"].map((tab) => (
+        {["客户资料", "跟进动态"].map((tab) => (
           <button className={detailTab === tab ? "active" : ""} key={tab} onClick={() => setDetailTab(tab)} type="button">
             {tab}
           </button>
         ))}
       </div>
 
-      {detailTab === "基本信息" && (
+      {detailTab === "客户资料" && (
         <>
           <div className="completeness-card">
             <div>
@@ -3977,15 +4059,18 @@ function CustomerDetail({
         </>
       )}
 
-      {detailTab === "商机详情" && (
-        <div className="detail-grid">
-          <Info label="预计金额" value={money(customer.amount)} />
-          <Info label="成交预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
-          <Info label="核心痛点" value={customer.painPoint || "未填写"} />
-          <Info label="决策链" value={customer.decisionMaker || "未填写"} />
-          <Info label="竞品/替代方案" value={customer.competitor || "未填写"} />
-          <Info label="标签" value={customer.tags || "暂无标签"} />
-        </div>
+      {detailTab === "客户资料" && (
+        <>
+          <div className="detail-group-title">商机判断</div>
+          <div className="detail-grid">
+            <Info label="预计金额" value={money(customer.amount)} />
+            <Info label="成交预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
+            <Info label="核心痛点" value={customer.painPoint || "未填写"} />
+            <Info label="决策链" value={customer.decisionMaker || "未填写"} />
+            <Info label="竞品/替代方案" value={customer.competitor || "未填写"} />
+            <Info label="标签" value={customer.tags || "暂无标签"} />
+          </div>
+        </>
       )}
 
       <div className={`advice-box ${risk.level}`}>
@@ -4008,13 +4093,13 @@ function CustomerDetail({
           <label className="wide">
             下一步动作
             <input
-              onChange={(event) => setPlanDraft({ ...planDraft, nextStep: event.target.value })}
+              onChange={(event) => updatePlanDraft({ nextStep: event.target.value })}
               value={planDraft.nextStep}
             />
           </label>
           <label>
             跟进方式
-            <select onChange={(event) => setPlanDraft({ ...planDraft, method: event.target.value })} value={planDraft.method}>
+            <select onChange={(event) => updatePlanDraft({ method: event.target.value })} value={planDraft.method}>
               {METHODS.map((method) => (
                 <option key={method}>{method}</option>
               ))}
@@ -4022,11 +4107,11 @@ function CustomerDetail({
           </label>
           <label>
             计划日期
-            <input onChange={(event) => setPlanDraft({ ...planDraft, dueDate: event.target.value })} type="date" value={planDraft.dueDate} />
+            <input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} />
           </label>
           <label>
             优先级
-            <select onChange={(event) => setPlanDraft({ ...planDraft, priority: event.target.value })} value={planDraft.priority}>
+            <select onChange={(event) => updatePlanDraft({ priority: event.target.value })} value={planDraft.priority}>
               {TASK_PRIORITIES.map((priority) => (
                 <option key={priority}>{priority}</option>
               ))}
@@ -4034,7 +4119,7 @@ function CustomerDetail({
           </label>
           <label>
             状态
-            <select onChange={(event) => setPlanDraft({ ...planDraft, status: event.target.value })} value={planDraft.status}>
+            <select onChange={(event) => updatePlanDraft({ status: event.target.value })} value={planDraft.status}>
               {PLAN_STATUSES.map((status) => (
                 <option key={status}>{status}</option>
               ))}
@@ -4046,7 +4131,7 @@ function CustomerDetail({
             <button
               className={planDraft.planType === type ? "active" : ""}
               key={type}
-              onClick={() => setPlanDraft({ ...planDraft, planType: type })}
+              onClick={() => updatePlanDraft({ planType: type })}
               type="button"
             >
               {type}
@@ -4062,7 +4147,7 @@ function CustomerDetail({
             <ClipboardList size={17} />
             复制计划
           </button>
-          <button className="primary-button" onClick={() => onSavePlan(customer.id, planDraft)} type="button">
+          <button className="primary-button" onClick={savePlan} type="button">
             <Save size={17} />
             保存计划
           </button>
@@ -4074,19 +4159,11 @@ function CustomerDetail({
           <Brain size={18} />
           {aiLoading ? "分析中" : "AI分析客户"}
         </button>
-        <button className="ghost-button" onClick={onNewFollow} type="button">
-          <Plus size={16} />
-          记录跟进
-        </button>
-        <button className="ghost-button" onClick={() => onCreateTask(customer.id)} type="button">
-          <Bell size={16} />
-          生成计划
-        </button>
       </div>
 
       {aiInsight && <AiInsight insight={aiInsight} />}
 
-      {detailTab === "基本信息" && (
+      {detailTab === "客户资料" && (
         <div className="note-box">
           <strong>备注</strong>
           <p>{customer.note || "暂无备注"}</p>
@@ -4608,10 +4685,12 @@ function customerDealPlan(customer, activities, tasks) {
   const missing = completeness.missing.slice(0, 4);
   const missingText = missing.length ? `\n需要补齐：${missing.join("、")}` : "";
   const riskText = risk.level === "good" ? "" : `\n风险处理：${risk.reason}`;
+  const savedPlan = customer.dealPlan || {};
 
   return {
     ...stagePlan,
-    priority,
+    ...savedPlan,
+    priority: savedPlan.priority || priority,
     cadence,
     missing,
     followupTemplate: `推进目标：${stagePlan.focus}\n本次要确认：${stagePlan.questions.join(" / ")}${missingText}${riskText}\n客户反馈：`,
