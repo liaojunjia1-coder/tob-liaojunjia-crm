@@ -62,8 +62,8 @@ button {
 }
 
 .sidebar {
-  background: rgba(18, 18, 20, 0.92);
-  border-right: 0;
+  background: linear-gradient(155deg, #f3f1ed 0%, #e2dfda 46%, #d1d5d8 100%);
+  border-right: 1px solid rgba(81, 79, 76, 0.1);
   backdrop-filter: blur(26px);
   display: flex;
   flex-direction: column;
@@ -72,6 +72,18 @@ button {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.24));
+  bottom: 0;
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 20px;
 }
 
 .brand,
@@ -83,9 +95,10 @@ button {
 
 .brand-mark {
   align-items: center;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(81, 79, 76, 0.1);
   border-radius: 14px;
-  color: #ffffff;
+  color: #172232;
   display: flex;
   font-size: 14px;
   font-weight: 800;
@@ -108,7 +121,7 @@ button {
 
 .brand h1,
 .auth-brand h1 {
-  color: #ffffff;
+  color: #172232;
   font-size: 24px;
   line-height: 1.15;
 }
@@ -123,7 +136,7 @@ button {
 }
 
 .brand p {
-  color: rgba(255, 255, 255, 0.62);
+  color: #687386;
 }
 
 .auth-brand h1 {
@@ -145,8 +158,8 @@ button {
 }
 
 .sidebar-status {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(81, 79, 76, 0.1);
   border-radius: 20px;
   display: grid;
   gap: 10px;
@@ -162,12 +175,12 @@ button {
 
 .sidebar-status span,
 .sidebar-status strong {
-  color: rgba(255, 255, 255, 0.76);
+  color: #687386;
   font-size: 13px;
 }
 
 .sidebar-status strong {
-  color: #ffffff;
+  color: #172232;
   font-weight: 760;
 }
 
@@ -176,7 +189,7 @@ button {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 16px;
-  color: rgba(255, 255, 255, 0.72);
+  color: #566274;
   display: flex;
   gap: 10px;
   min-height: 44px;
@@ -186,10 +199,10 @@ button {
 
 .nav-item.active,
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.62);
+  border-color: rgba(81, 79, 76, 0.1);
+  color: #172232;
+  box-shadow: 0 10px 24px rgba(24, 39, 56, 0.08);
   transform: translateX(2px);
 }
 
@@ -1176,6 +1189,13 @@ textarea {
   line-height: 1.12;
   margin: 10px 0 6px;
   overflow-wrap: anywhere;
+}
+
+.detail-group-title {
+  color: #5f6875;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 16px 0 8px;
 }
 
 .detail-header p {
