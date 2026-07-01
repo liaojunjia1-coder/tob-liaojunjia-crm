@@ -335,7 +335,7 @@ const defaultData = {
       id: "ct-1",
       customerId: "c-5",
       title: "销售过程试点服务合同",
-      contractNo: "LJ-202606-001",
+      contractNo: "TOB-202606-001",
       amount: "128000",
       paidAmount: "30000",
       status: "部分回款",
@@ -348,7 +348,7 @@ const defaultData = {
       id: "ct-2",
       customerId: "c-2",
       title: "外贸询盘管理试用报价",
-      contractNo: "LJ-202606-002",
+      contractNo: "TOB-202606-002",
       amount: "88000",
       paidAmount: "0",
       status: "合同审核",
@@ -552,7 +552,11 @@ function normalizeData(raw) {
       planType: task.planType || "日计划",
       status: task.done ? "已完成" : task.status || "进行中",
     })),
-    contracts: (source.contracts || []).map((contract) => ({ ...emptyContract, ...contract })),
+    contracts: (source.contracts || []).map((contract) => ({
+      ...emptyContract,
+      ...contract,
+      contractNo: String(contract.contractNo || "").replace(/^LJ-/, "TOB-"),
+    })),
     contractFiles: source.contractFiles || [],
     salesDiary: source.salesDiary || "",
     logs: dedupeLogs(source.logs || []),
@@ -1756,7 +1760,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">LJ</div>
+          <div className="brand-mark">TOB</div>
           <div>
             <h1>Tob廖俊嘉</h1>
             <p>个人销售中台</p>
@@ -3801,7 +3805,7 @@ function AuthScreen({ authError, authForm, authMode, onChange, onModeChange, onR
     <main className="auth-shell">
       <section className="auth-panel">
         <div className="auth-brand">
-          <div className="brand-mark">LJ</div>
+          <div className="brand-mark">TOB</div>
           <div>
             <h1>Tob廖俊嘉</h1>
             <p>本机保存客户、跟进和计划，打开即可使用。</p>
@@ -3869,7 +3873,7 @@ function LoadingScreen() {
   return (
     <main className="auth-shell">
       <section className="auth-panel loading-panel">
-        <div className="brand-mark">LJ</div>
+        <div className="brand-mark">TOB</div>
         <h1>正在打开 CRM</h1>
       </section>
     </main>
