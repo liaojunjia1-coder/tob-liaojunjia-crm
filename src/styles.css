@@ -1263,6 +1263,95 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.project-requirements-card,
+.form-section-details {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 14px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.project-requirements-card > summary,
+.form-section-details > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 58px;
+  padding: 12px 14px;
+}
+
+.project-requirements-card > summary::-webkit-details-marker,
+.form-section-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-requirements-card > summary span,
+.form-section-details > summary span {
+  display: grid;
+  gap: 3px;
+}
+
+.project-requirements-card > summary small,
+.form-section-details > summary small {
+  color: #6e7378;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.project-requirements-card > summary em {
+  background: #edf4ff;
+  border-radius: 999px;
+  color: #315f99;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.project-requirements-card[open] > summary,
+.form-section-details[open] > summary {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.project-requirements-content,
+.project-requirements-empty {
+  padding: 14px;
+}
+
+.project-requirements-empty {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.project-requirements-empty p {
+  color: #5d6369;
+  margin: 0;
+}
+
+.requirement-products {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.requirement-products > small {
+  color: #6e7378;
+}
+
+.project-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.requirement-edit-button {
+  margin-left: auto;
+}
+
 .info-item {
   background: rgba(255, 255, 255, 0.76);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -1585,6 +1674,58 @@ textarea {
 .form-grid .wide,
 .form-actions {
   grid-column: 1 / -1;
+}
+
+.form-section-details {
+  margin: 0;
+}
+
+.project-form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 14px;
+}
+
+.project-form-grid label,
+.product-choice-field {
+  color: #4c5258;
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 7px;
+}
+
+.project-form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.choice-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-chip {
+  background: #f5f6f8;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  color: #4c5258;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 10px;
+}
+
+.choice-chip.active {
+  background: #eaf2ff;
+  border-color: rgba(49, 95, 153, 0.24);
+  color: #244d80;
+  font-weight: 800;
+}
+
+.choice-chip-list.readonly .choice-chip {
+  align-items: center;
+  display: inline-flex;
 }
 
 .ai-box.wide {
@@ -2927,6 +3068,22 @@ textarea {
     .lead-grade-grid,
     .contract-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .project-form-grid,
+  .project-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-requirements-empty {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-requirements-empty button,
+  .requirement-edit-button {
+    margin-left: 0;
+    width: 100%;
   }
 
   .contract-card,
