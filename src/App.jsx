@@ -67,6 +67,9 @@ const TASK_PRIORITIES = ["高", "中", "低"];
 const PLAN_TYPES = ["日计划", "周计划", "月计划"];
 const PLAN_STATUSES = ["进行中", "未开始", "已完成", "已延期"];
 const CONTRACT_STATUS = ["合同审核", "已签约", "部分回款", "已回款", "逾期", "暂停"];
+const CUSTOMER_TYPES = ["终端工厂", "集成商/机器人厂商", "渠道/代理商", "商业服务", "文旅零售", "科研院校", "职业教育", "青少年培训", "其他"];
+const DEXFORCE_PRODUCTS = ["W1 Pro", "DexVerse", "EmbodiChain", "PickWiz", "X-Wiz", "KINGFISHER", "XEMA / SPARROW", "FINCH", "复合机器人工作站", "上下料工作站"];
+const APPLICATION_SCENARIOS = ["拆垛", "无序抓取", "上下料", "精准定位", "物流搬运", "商业服务", "咖啡/零售", "文旅互动", "科研教学", "青少年培训", "其他"];
 const FOLLOWUP_TEMPLATES = [
   {
     label: "电话沟通",
@@ -114,6 +117,17 @@ const emptyCustomer = {
   competitor: "",
   tags: "",
   note: "",
+  customerType: "",
+  interestedProducts: [],
+  applicationScenario: "",
+  workpiece: "",
+  robotModel: "",
+  accuracyRequirement: "",
+  cycleRequirement: "",
+  siteChallenges: "",
+  testMaterials: "",
+  projectTimeline: "",
+  technicalContact: "",
 };
 
 const emptyContract = {
@@ -560,6 +574,7 @@ function normalizeData(raw) {
     customers: (source.customers || []).map((customer) => ({
       ...emptyCustomer,
       ...customer,
+      interestedProducts: Array.isArray(customer.interestedProducts) ? customer.interestedProducts : [],
       amount: migrateSampleAmounts && SAMPLE_CUSTOMER_AMOUNTS[customer.id]
         ? SAMPLE_CUSTOMER_AMOUNTS[customer.id]
         : customer.amount,
@@ -1311,6 +1326,17 @@ function App() {
       competitor: customerForm.competitor.trim(),
       tags: customerForm.tags.trim(),
       note: customerForm.note.trim(),
+      customerType: customerForm.customerType.trim(),
+      interestedProducts: Array.isArray(customerForm.interestedProducts) ? customerForm.interestedProducts : [],
+      applicationScenario: customerForm.applicationScenario.trim(),
+      workpiece: customerForm.workpiece.trim(),
+      robotModel: customerForm.robotModel.trim(),
+      accuracyRequirement: customerForm.accuracyRequirement.trim(),
+      cycleRequirement: customerForm.cycleRequirement.trim(),
+      siteChallenges: customerForm.siteChallenges.trim(),
+      testMaterials: customerForm.testMaterials.trim(),
+      projectTimeline: customerForm.projectTimeline.trim(),
+      technicalContact: customerForm.technicalContact.trim(),
     };
     if (!clean.company) return;
 
@@ -4083,6 +4109,8 @@ function CustomerDetail({
             <Info label="客户评级" value={`${customer.priority}类`} />
             <Info label="联系方式" value={customer.phone || "未填写"} />
           </div>
+
+          <ProjectRequirements customer={customer} onEdit={() => onEdit(customer)} />
         </>
       )}
 
@@ -4241,6 +4269,15 @@ function AiInsight({ insight }) {
 }
 
 function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
+  const selectedProducts = Array.isArray(customerForm.interestedProducts) ? customerForm.interestedProducts : [];
+
+  function toggleProduct(product) {
+    const interestedProducts = selectedProducts.includes(product)
+      ? selectedProducts.filter((item) => item !== product)
+      : [...selectedProducts, product];
+    onChange({ ...customerForm, interestedProducts });
+  }
+
   return (
     <div className="drawer-backdrop">
       <section className="drawer">
@@ -4285,6 +4322,52 @@ function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
             备注
             <textarea onChange={(event) => onChange({ ...customerForm, note: event.target.value })} rows="3" value={customerForm.note} />
           </label>
+          <details className="form-section-details wide">
+            <summary>
+              <span>项目需求</span>
+              <small>产品意向、应用场景和技术条件</small>
+            </summary>
+            <div className="project-form-grid">
+              <label>
+                客户类型
+                <select onChange={(event) => onChange({ ...customerForm, customerType: event.target.value })} value={customerForm.customerType}>
+                  <option value="">请选择</option>
+                  {CUSTOMER_TYPES.map((type) => <option key={type}>{type}</option>)}
+                </select>
+              </label>
+              <label>
+                应用场景
+                <select onChange={(event) => onChange({ ...customerForm, applicationScenario: event.target.value })} value={customerForm.applicationScenario}>
+                  <option value="">请选择</option>
+                  {APPLICATION_SCENARIOS.map((scenario) => <option key={scenario}>{scenario}</option>)}
+                </select>
+              </label>
+              <div className="product-choice-field wide">
+                <span>意向产品（可多选）</span>
+                <div className="choice-chip-list">
+                  {DEXFORCE_PRODUCTS.map((product) => (
+                    <button
+                      aria-pressed={selectedProducts.includes(product)}
+                      className={selectedProducts.includes(product) ? "choice-chip active" : "choice-chip"}
+                      key={product}
+                      onClick={() => toggleProduct(product)}
+                      type="button"
+                    >
+                      {product}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <TextField label="工件/服务对象" value={customerForm.workpiece} onChange={(workpiece) => onChange({ ...customerForm, workpiece })} />
+              <TextField label="现有机器人/设备" value={customerForm.robotModel} onChange={(robotModel) => onChange({ ...customerForm, robotModel })} />
+              <TextField label="精度要求" value={customerForm.accuracyRequirement} onChange={(accuracyRequirement) => onChange({ ...customerForm, accuracyRequirement })} />
+              <TextField label="节拍要求" value={customerForm.cycleRequirement} onChange={(cycleRequirement) => onChange({ ...customerForm, cycleRequirement })} />
+              <TextField label="现场难点" value={customerForm.siteChallenges} onChange={(siteChallenges) => onChange({ ...customerForm, siteChallenges })} />
+              <TextField label="可提供测试材料" value={customerForm.testMaterials} onChange={(testMaterials) => onChange({ ...customerForm, testMaterials })} />
+              <TextField label="项目时间窗口" value={customerForm.projectTimeline} onChange={(projectTimeline) => onChange({ ...customerForm, projectTimeline })} />
+              <TextField label="技术联系人" value={customerForm.technicalContact} onChange={(technicalContact) => onChange({ ...customerForm, technicalContact })} />
+            </div>
+          </details>
           <div className="form-actions">
             <button className="secondary-button" onClick={onClose} type="button">
               <X size={18} />
@@ -4298,6 +4381,72 @@ function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
         </form>
       </section>
     </div>
+  );
+}
+
+function ProjectRequirements({ customer, onEdit }) {
+  const products = Array.isArray(customer.interestedProducts) ? customer.interestedProducts : [];
+  const fields = [
+    customer.customerType,
+    products.length,
+    customer.applicationScenario,
+    customer.workpiece,
+    customer.robotModel,
+    customer.accuracyRequirement,
+    customer.cycleRequirement,
+    customer.siteChallenges,
+    customer.testMaterials,
+    customer.projectTimeline,
+    customer.technicalContact,
+  ];
+  const completed = fields.filter(Boolean).length;
+
+  return (
+    <details className="project-requirements-card">
+      <summary>
+        <span>
+          <strong>项目需求</strong>
+          <small>产品匹配与技术条件</small>
+        </span>
+        <em>{completed}/{fields.length}</em>
+      </summary>
+      {completed ? (
+        <div className="project-requirements-content">
+          {!!products.length && (
+            <div className="requirement-products">
+              <small>意向产品</small>
+              <div className="choice-chip-list readonly">
+                {products.map((product) => <span className="choice-chip active" key={product}>{product}</span>)}
+              </div>
+            </div>
+          )}
+          <div className="detail-grid project-detail-grid">
+            <Info label="客户类型" value={customer.customerType || "未填写"} />
+            <Info label="应用场景" value={customer.applicationScenario || "未填写"} />
+            <Info label="工件/服务对象" value={customer.workpiece || "未填写"} />
+            <Info label="现有机器人/设备" value={customer.robotModel || "未填写"} />
+            <Info label="精度要求" value={customer.accuracyRequirement || "未填写"} />
+            <Info label="节拍要求" value={customer.cycleRequirement || "未填写"} />
+            <Info label="现场难点" value={customer.siteChallenges || "未填写"} />
+            <Info label="测试材料" value={customer.testMaterials || "未填写"} />
+            <Info label="项目时间窗口" value={customer.projectTimeline || "未填写"} />
+            <Info label="技术联系人" value={customer.technicalContact || "未填写"} />
+          </div>
+          <button className="secondary-button requirement-edit-button" onClick={onEdit} type="button">
+            <Edit3 size={16} />
+            编辑项目需求
+          </button>
+        </div>
+      ) : (
+        <div className="project-requirements-empty">
+          <p>补充应用场景和技术条件，后续方案沟通会更准确。</p>
+          <button className="secondary-button" onClick={onEdit} type="button">
+            <Plus size={16} />
+            补充项目需求
+          </button>
+        </div>
+      )}
+    </details>
   );
 }
 
