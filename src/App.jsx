@@ -67,95 +67,8 @@ const TASK_PRIORITIES = ["高", "中", "低"];
 const PLAN_TYPES = ["日计划", "周计划", "月计划"];
 const PLAN_STATUSES = ["进行中", "未开始", "已完成", "已延期"];
 const CONTRACT_STATUS = ["合同审核", "已签约", "部分回款", "已回款", "逾期", "暂停"];
-const CUSTOMER_TYPES = ["终端工厂", "集成商/机器人厂商", "渠道/代理商", "商业服务", "文旅零售", "科研院校", "职业教育", "青少年培训", "其他"];
-const DEXFORCE_PRODUCTS = ["W1 Pro", "DexVerse", "EmbodiChain", "PickWiz", "X-Wiz", "KINGFISHER", "XEMA / SPARROW", "FINCH", "复合机器人工作站", "上下料工作站"];
-const APPLICATION_SCENARIOS = ["拆垛", "无序抓取", "上下料", "精准定位", "物流搬运", "商业服务", "咖啡/零售", "文旅互动", "科研教学", "青少年培训", "其他"];
-const PRODUCT_LEARNING = [
-  {
-    id: "product-w1",
-    name: "DexForce W1 Pro",
-    family: "人形机器人",
-    summary: "面向真实场景的通用人形机器人，可按任务选配灵巧手或二指夹爪、移动底盘和腕部相机。",
-    value: "把移动、感知、双臂操作和大模型能力放进同一台机器人，适合需要柔性作业或人机交互的场景。",
-    customers: "工业制造、商业服务、科研教育、数据采集训练、文旅运营",
-    facts: ["单臂最大负载 10kg", "手臂重复定位精度 ±0.5mm", "1000Hz 关节控制", "支持二次开发与遥操作"],
-    questions: ["任务是否需要移动？", "操作对象、重量和尺寸是什么？", "现场需要灵巧手还是二指夹爪？", "是否需要二次开发或数据采集？"],
-    sourceUrl: "https://www.dexforce.com/w1pro.html",
-  },
-  {
-    id: "product-dexverse",
-    name: "DexVerse + EmbodiChain",
-    family: "具身智能平台",
-    summary: "DexVerse 是具身智能引擎；EmbodiChain 侧重 Real2Sim2Real 数据生成、仿真和模型训练。",
-    value: "帮助机器人更快学习新任务，减少真实数据采集和人工标注成本，并支持从仿真训练迁移到真实环境。",
-    customers: "机器人厂商、系统集成商、高校实验室、具身智能研发团队",
-    facts: ["覆盖任务理解、数字资产、仿真和训练链路", "支持合成数据训练", "面向复杂操作任务", "具体交付边界需入职后确认"],
-    questions: ["客户是在买完整方案还是开发能力？", "现有机器人本体和仿真平台是什么？", "当前数据采集和标注成本多高？", "希望训练哪类操作任务？"],
-    sourceUrl: "https://www.dexforce.com/about.html",
-  },
-  {
-    id: "product-pickwiz",
-    name: "PickWiz",
-    family: "3D 视觉软件",
-    summary: "工业视觉引导抓取软件，用菜单化流程完成视觉配置、机器人通信、识别和抓取调试。",
-    value: "降低 3D 视觉项目的使用和交付门槛，覆盖拆垛、无序抓取、有序上下料和单目标定位。",
-    customers: "自动化集成商、机器人厂商、汽车零部件、家电、物流及一般工业客户",
-    facts: ["强调零代码、零编程", "支持常见机器人和通信协议", "可视化调参与生产界面", "内置行业案例"],
-    questions: ["要识别和抓取什么工件？", "来料是有序、散乱还是堆叠？", "机器人品牌和通信协议是什么？", "精度、节拍和换型频率是多少？"],
-    sourceUrl: "https://dexforce.top/proInfo-76.html",
-  },
-  {
-    id: "product-dexsense",
-    name: "DexSense 相机系列",
-    family: "3D 视觉硬件",
-    summary: "包括 KINGFISHER 纯视觉双目、XEMA / SPARROW 主动结构光和 FINCH 激光振镜系列。",
-    value: "按工作距离、视野、精度、材质和光照条件选择成像方案，为识别、定位、检测和机器人引导提供点云。",
-    customers: "视觉集成商、自动化设备商、终端工厂、科研团队",
-    facts: ["KINGFISHER 适合复杂光照与大视野场景", "FINCH 兼顾大视野与高精度", "系列支持 Windows / Linux 与常见 SDK", "具体选型必须由技术参数确认"],
-    questions: ["工作距离和视野范围是多少？", "工件是否黑色、高反、透明？", "现场光照是否变化或有强光？", "需要的 Z 向精度和采集时间是多少？"],
-    sourceUrl: "https://dexforce.top/products.html",
-  },
-  {
-    id: "product-dexagent",
-    name: "DexAgent 工作站",
-    family: "一站式方案",
-    summary: "把视觉、软件、机器人和工艺集成为可落地工作站，包括复合机器人与上下料工作站。",
-    value: "客户不只购买单个软硬件，而是购买更快上线、换型和稳定生产的完整作业单元。",
-    customers: "汽车零部件、工程机械、消费电子、家电及柔性生产客户",
-    facts: ["覆盖复合机器人和上下料方案", "支持多产品型号切换", "可结合 DexVerse 训练新工件", "现场节拍与验收标准需前置确认"],
-    questions: ["现有工序如何完成，人工成本是多少？", "上下游设备和安全边界是什么？", "一班产量、节拍和良率目标是多少？", "客户接受的停线改造窗口多长？"],
-    sourceUrl: "https://dexforce.top/proInfo-82.html",
-  },
-];
-
-const CUSTOMER_LEARNING = [
-  { id: "customer-factory", name: "终端制造工厂", signal: "有明确工序、节拍、人工或质量问题", fit: "PickWiz、DexSense、DexAgent、W1 Pro", roles: "生产负责人、设备部、自动化部门、工艺工程师、采购", firstMove: "先看现场和工件，再谈产品。" },
-  { id: "customer-integrator", name: "系统集成商 / 机器人厂商", signal: "手里有项目，但缺视觉、算法或具身能力", fit: "PickWiz、DexSense、DexVerse / EmbodiChain", roles: "老板、方案经理、项目经理、视觉工程师", firstMove: "先确认项目边界、机器人品牌和交付责任。" },
-  { id: "customer-research", name: "高校 / 科研机构", signal: "需要具身研究平台、数据采集或二次开发", fit: "W1 Pro、DexVerse、EmbodiChain", roles: "课题负责人、实验室老师、设备采购、研究生团队", firstMove: "先问研究方向、预算来源和验收成果。" },
-  { id: "customer-commercial", name: "商业服务运营商", signal: "希望通过机器人形成可运营、可复制的服务项目", fit: "W1 Pro 与商业服务解决方案", roles: "运营负责人、品牌方、场地方、投资决策人", firstMove: "先算客流、坪效、单店收入和运维成本。" },
-  { id: "customer-culture", name: "文旅 / 零售 / 公共体验", signal: "需要互动引流、内容传播或标准化服务", fit: "W1 Pro、商业服务站、定制场景方案", roles: "景区运营、商业体、品牌市场、项目投资方", firstMove: "先确认真实运营目标，不只讨论展示效果。" },
-  { id: "customer-channel", name: "渠道 / 代理伙伴", signal: "有区域客户、行业资源或交付能力", fit: "空间与具身智能套件及行业方案", roles: "公司负责人、渠道经理、售前与交付团队", firstMove: "确认客户资源、技术能力、覆盖区域和合作分工。" },
-  { id: "customer-training", name: "职业教育 / 青少年科创", signal: "潜在方向，公开资料不足", fit: "W1 Pro、科研教学与二次开发能力", roles: "学校负责人、专业老师、实训中心、培训机构", firstMove: "标记为待入职确认，不提前承诺产品包和课程方案。", pending: true },
-];
-
-const SCENE_LEARNING = [
-  { id: "scene-picking", name: "拆垛 / 无序抓取", problem: "工件姿态随机、堆叠遮挡，人工上料强度高。", solution: "3D 相机获取点云，PickWiz 识别位姿并引导机器人抓取。", mustAsk: "工件材质、尺寸重量、料框、机器人、节拍、清框率。" },
-  { id: "scene-loading", name: "机床上下料", problem: "重复搬运、夜班用工、换型和稳定节拍压力。", solution: "视觉、机器人与工艺联动形成上下料工作站。", mustAsk: "机床接口、夹具、上下料姿态、节拍、安全和停线窗口。" },
-  { id: "scene-positioning", name: "精准定位 / 装配", problem: "来料位置存在偏差，固定治具柔性不足。", solution: "通过 3D 视觉定位目标，引导机器人抓取、放置或装配。", mustAsk: "定位精度、视野、工作距离、工件反光和容差。" },
-  { id: "scene-mobile", name: "移动操作 / 巡检", problem: "任务点分散，需要移动、识别、交互或双臂操作。", solution: "W1 Pro 结合 SLAM、视觉和末端执行器完成移动作业。", mustAsk: "路线、地面、门槛、续航、操作高度、负载和安全要求。" },
-  { id: "scene-commercial", name: "咖啡 / 零售 / 商业服务", problem: "需要标准化制作、互动引流和持续运营。", solution: "人形机器人结合场景设备和运营方案提供服务。", mustAsk: "客流、出品节拍、SKU、场地、电力、人员运维和收入模型。" },
-  { id: "scene-research", name: "科研教学 / 数据采集", problem: "缺少可二次开发的机器人平台、训练数据或仿真能力。", solution: "W1 Pro、DexVerse 和 EmbodiChain 支持研究、训练与任务开发。", mustAsk: "课题方向、开发接口、数据类型、算力、交付成果和采购时间。" },
-];
-
-const LEARNING_STEPS = [
-  { id: "step-map", title: "看懂产品矩阵", detail: "能说清机器人、引擎、视觉软件、相机和工作站的关系。" },
-  { id: "step-w1", title: "掌握 W1 Pro", detail: "用 1 分钟讲清能力、适用客户和四个关键参数。" },
-  { id: "step-vision", title: "掌握工业视觉套件", detail: "知道 PickWiz、相机和工作站分别解决什么。" },
-  { id: "step-customer", title: "认清客户群体", detail: "看到客户类型，能判断应该先找哪个角色。" },
-  { id: "step-scene", title: "掌握六类场景", detail: "每个场景至少能问出 5 个有效问题。" },
-  { id: "step-pitch", title: "完成 3 分钟产品介绍", detail: "不背参数，从客户问题讲到产品价值和下一步。" },
-  { id: "step-confirm", title: "整理入职确认清单", detail: "把价格、交付边界、成功案例和内部流程留给入职后确认。" },
-];
+const CUSTOMER_TYPES = ["终端客户", "企业客户", "集成商/服务商", "渠道/代理商", "政府/事业单位", "科研院校", "其他"];
+const APPLICATION_SCENARIOS = ["生产制造", "仓储物流", "设备运维", "企业管理", "商业服务", "科研教学", "其他"];
 const FOLLOWUP_TEMPLATES = [
   {
     label: "电话沟通",
@@ -179,7 +92,6 @@ const FOLLOWUP_TEMPLATES = [
 
 const VIEWS = [
   { id: "dashboard", label: "看板", icon: LayoutDashboard },
-  { id: "learning", label: "产品学习", icon: BookOpen },
   { id: "pipeline", label: "漏斗", icon: TrendingUp },
   { id: "customers", label: "客户", icon: Users },
   { id: "leads", label: "线索池", icon: Target },
@@ -205,7 +117,7 @@ const emptyCustomer = {
   tags: "",
   note: "",
   customerType: "",
-  interestedProducts: [],
+  productInterest: "",
   applicationScenario: "",
   workpiece: "",
   robotModel: "",
@@ -236,11 +148,6 @@ const defaultSettings = {
   aiMode: "实用销售参谋",
 };
 
-const defaultLearningState = {
-  completed: [],
-  notes: "",
-};
-
 const defaultData = {
   dataVersion: DATA_VERSION,
   customers: [],
@@ -250,7 +157,6 @@ const defaultData = {
   contractFiles: [],
   salesDiary: "",
   logs: [],
-  learning: defaultLearningState,
   settings: defaultSettings,
 };
 
@@ -424,7 +330,8 @@ function normalizeData(raw) {
     customers: (source.customers || []).map((customer) => ({
       ...emptyCustomer,
       ...customer,
-      interestedProducts: Array.isArray(customer.interestedProducts) ? customer.interestedProducts : [],
+      interestedProducts: [],
+      productInterest: customer.productInterest || "",
       recordedAt: customer.recordedAt || customer.closeDate || todayInputValue(),
     })),
     activities: source.activities || [],
@@ -442,11 +349,6 @@ function normalizeData(raw) {
     contractFiles: source.contractFiles || [],
     salesDiary: source.salesDiary || "",
     logs: dedupeLogs(source.logs || []),
-    learning: {
-      ...defaultLearningState,
-      ...(source.learning || {}),
-      completed: Array.isArray(source.learning?.completed) ? source.learning.completed : [],
-    },
     settings: { ...defaultSettings, ...(source.settings || {}) },
   };
 }
@@ -460,6 +362,7 @@ function clearPreviousContentDrafts() {
 
 function loadLocalData() {
   try {
+    window.localStorage.removeItem(formDraftKey("learning-notes"));
     const saved = window.localStorage.getItem(STORAGE_KEY);
     const parsed = saved ? JSON.parse(saved) : defaultData;
     if (Number(parsed.dataVersion || 0) < DATA_VERSION) clearPreviousContentDrafts();
@@ -1185,7 +1088,7 @@ function App() {
       tags: customerForm.tags.trim(),
       note: customerForm.note.trim(),
       customerType: customerForm.customerType.trim(),
-      interestedProducts: Array.isArray(customerForm.interestedProducts) ? customerForm.interestedProducts : [],
+      productInterest: customerForm.productInterest.trim(),
       applicationScenario: customerForm.applicationScenario.trim(),
       workpiece: customerForm.workpiece.trim(),
       robotModel: customerForm.robotModel.trim(),
@@ -1547,19 +1450,6 @@ function App() {
     setSyncStatus("销售日记已保存");
   }
 
-  function toggleLearningItem(itemId) {
-    const completed = data.learning.completed.includes(itemId)
-      ? data.learning.completed.filter((id) => id !== itemId)
-      : [...data.learning.completed, itemId];
-    commit({ ...data, learning: { ...data.learning, completed } });
-    setSyncStatus("学习进度已保存");
-  }
-
-  function saveLearningNotes(notes) {
-    commit({ ...data, learning: { ...data.learning, notes: notes.trim() } });
-    setSyncStatus("学习笔记已保存");
-  }
-
   function saveReviewAction(draft, customerId) {
     const title = String(draft?.nextStep || "").trim();
     if (!title) {
@@ -1764,14 +1654,6 @@ function App() {
           />
         )}
 
-        {activeView === "learning" && (
-          <ProductLearningView
-            learning={data.learning}
-            onSaveNotes={saveLearningNotes}
-            onToggle={toggleLearningItem}
-          />
-        )}
-
         {activeView === "pipeline" && (
           <PipelineView
             activities={data.activities}
@@ -1938,151 +1820,6 @@ function App() {
         )}
       </main>
     </div>
-  );
-}
-
-function ProductLearningView({ learning, onSaveNotes, onToggle }) {
-  const [learningTab, setLearningTab] = useState("产品矩阵");
-  const [notes, setNotes, clearNotesDraft] = useStoredDraft("learning-notes", learning.notes || "");
-  const trackableIds = [...PRODUCT_LEARNING.map((item) => item.id), ...LEARNING_STEPS.map((item) => item.id)];
-  const completedCount = trackableIds.filter((id) => learning.completed.includes(id)).length;
-  const progress = Math.round((completedCount / trackableIds.length) * 100);
-
-  function saveNotes() {
-    onSaveNotes(notes);
-    clearNotesDraft(notes);
-  }
-
-  return (
-    <section className="view learning-view">
-      <section className="learning-overview">
-        <div>
-          <span className="eyebrow">入职前学习地图</span>
-          <h3>先建立产品、客户和场景的连接</h3>
-          <p>公开资料用于入门；价格、交付边界、内部流程和最新案例，统一留到入职后确认。</p>
-        </div>
-        <div className="learning-progress" aria-label={`学习进度 ${progress}%`}>
-          <strong>{progress}%</strong>
-          <span>{completedCount}/{trackableIds.length} 项</span>
-          <div><i style={{ width: `${progress}%` }} /></div>
-        </div>
-      </section>
-
-      <div className="segmented learning-tabs">
-        {["产品矩阵", "客户群体", "应用场景", "7天计划"].map((tab) => (
-          <button className={learningTab === tab ? "active" : ""} key={tab} onClick={() => setLearningTab(tab)} type="button">
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {learningTab === "产品矩阵" && (
-        <div className="learning-product-grid">
-          {PRODUCT_LEARNING.map((product, index) => {
-            const done = learning.completed.includes(product.id);
-            return (
-              <article className={`learning-product-card${done ? " done" : ""}`} key={product.id}>
-                <div className="learning-card-index">0{index + 1}</div>
-                <div className="learning-card-head">
-                  <div>
-                    <span>{product.family}</span>
-                    <h3>{product.name}</h3>
-                  </div>
-                  <button className={done ? "learning-check active" : "learning-check"} onClick={() => onToggle(product.id)} type="button">
-                    {done ? <Check size={16} /> : <Circle size={16} />}
-                    {done ? "已掌握" : "标记掌握"}
-                  </button>
-                </div>
-                <p className="learning-summary">{product.summary}</p>
-                <div className="learning-value">
-                  <small>客户价值</small>
-                  <strong>{product.value}</strong>
-                </div>
-                <div className="learning-customer-line"><span>适合客户</span>{product.customers}</div>
-                <details className="learning-detail">
-                  <summary>关键参数与首次提问</summary>
-                  <div className="learning-detail-columns">
-                    <div>
-                      <strong>先记住</strong>
-                      {product.facts.map((fact) => <span key={fact}>{fact}</span>)}
-                    </div>
-                    <div>
-                      <strong>第一次问</strong>
-                      {product.questions.map((question) => <span key={question}>{question}</span>)}
-                    </div>
-                  </div>
-                  <a className="source-link" href={product.sourceUrl} rel="noreferrer" target="_blank">查看官方资料 <ArrowRight size={15} /></a>
-                </details>
-              </article>
-            );
-          })}
-        </div>
-      )}
-
-      {learningTab === "客户群体" && (
-        <section className="surface learning-list-surface">
-          <div className="learning-list-head">
-            <span>客户类型</span><span>适配方向</span><span>首次动作</span>
-          </div>
-          {CUSTOMER_LEARNING.map((customer) => (
-            <article className="learning-customer-row" key={customer.id}>
-              <div>
-                <strong>{customer.name}</strong>
-                {customer.pending && <em>待入职确认</em>}
-                <small>{customer.signal}</small>
-              </div>
-              <div><span>适配产品</span><strong>{customer.fit}</strong><small>常见角色：{customer.roles}</small></div>
-              <p>{customer.firstMove}</p>
-            </article>
-          ))}
-        </section>
-      )}
-
-      {learningTab === "应用场景" && (
-        <div className="learning-scene-list">
-          {SCENE_LEARNING.map((scene, index) => (
-            <article key={scene.id}>
-              <div className="scene-number">{String(index + 1).padStart(2, "0")}</div>
-              <div><span>场景</span><h3>{scene.name}</h3></div>
-              <div><span>客户问题</span><p>{scene.problem}</p></div>
-              <div><span>方案路径</span><p>{scene.solution}</p></div>
-              <div><span>必须问</span><p>{scene.mustAsk}</p></div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {learningTab === "7天计划" && (
-        <div className="learning-plan-layout">
-          <section className="surface learning-plan-card">
-            <div className="panel-heading">
-              <div><span className="eyebrow">7 天入门</span><h3>每天完成一个可验证结果</h3></div>
-            </div>
-            <div className="learning-step-list">
-              {LEARNING_STEPS.map((step, index) => {
-                const done = learning.completed.includes(step.id);
-                return (
-                  <button className={done ? "learning-step done" : "learning-step"} key={step.id} onClick={() => onToggle(step.id)} type="button">
-                    <span>{done ? <Check size={17} /> : index + 1}</span>
-                    <div><strong>{step.title}</strong><small>{step.detail}</small></div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          <section className="surface learning-notes-card">
-            <div className="panel-heading"><div><span className="eyebrow">个人笔记</span><h3>入职确认清单</h3></div></div>
-            <textarea
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="例如：\n1. W1 Pro 当前主推配置和报价范围？\n2. 售前、技术、交付分别在什么时候介入？\n3. 哪些行业案例可以对外讲？"
-              rows="14"
-              value={notes}
-            />
-            <button className="primary-button" onClick={saveNotes} type="button"><Save size={17} />保存笔记</button>
-          </section>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -4293,15 +4030,6 @@ function AiInsight({ insight }) {
 }
 
 function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
-  const selectedProducts = Array.isArray(customerForm.interestedProducts) ? customerForm.interestedProducts : [];
-
-  function toggleProduct(product) {
-    const interestedProducts = selectedProducts.includes(product)
-      ? selectedProducts.filter((item) => item !== product)
-      : [...selectedProducts, product];
-    onChange({ ...customerForm, interestedProducts });
-  }
-
   return (
     <div className="drawer-backdrop">
       <section className="drawer">
@@ -4366,21 +4094,12 @@ function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
                   {APPLICATION_SCENARIOS.map((scenario) => <option key={scenario}>{scenario}</option>)}
                 </select>
               </label>
-              <div className="product-choice-field wide">
-                <span>意向产品（可多选）</span>
-                <div className="choice-chip-list">
-                  {DEXFORCE_PRODUCTS.map((product) => (
-                    <button
-                      aria-pressed={selectedProducts.includes(product)}
-                      className={selectedProducts.includes(product) ? "choice-chip active" : "choice-chip"}
-                      key={product}
-                      onClick={() => toggleProduct(product)}
-                      type="button"
-                    >
-                      {product}
-                    </button>
-                  ))}
-                </div>
+              <div className="wide">
+                <TextField
+                  label="意向产品/方案"
+                  value={customerForm.productInterest}
+                  onChange={(productInterest) => onChange({ ...customerForm, productInterest })}
+                />
               </div>
               <TextField label="工件/服务对象" value={customerForm.workpiece} onChange={(workpiece) => onChange({ ...customerForm, workpiece })} />
               <TextField label="现有机器人/设备" value={customerForm.robotModel} onChange={(robotModel) => onChange({ ...customerForm, robotModel })} />
@@ -4409,10 +4128,9 @@ function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
 }
 
 function ProjectRequirements({ customer, onEdit }) {
-  const products = Array.isArray(customer.interestedProducts) ? customer.interestedProducts : [];
   const fields = [
     customer.customerType,
-    products.length,
+    customer.productInterest,
     customer.applicationScenario,
     customer.workpiece,
     customer.robotModel,
@@ -4436,16 +4154,9 @@ function ProjectRequirements({ customer, onEdit }) {
       </summary>
       {completed ? (
         <div className="project-requirements-content">
-          {!!products.length && (
-            <div className="requirement-products">
-              <small>意向产品</small>
-              <div className="choice-chip-list readonly">
-                {products.map((product) => <span className="choice-chip active" key={product}>{product}</span>)}
-              </div>
-            </div>
-          )}
           <div className="detail-grid project-detail-grid">
             <Info label="客户类型" value={customer.customerType || "未填写"} />
+            <Info label="意向产品/方案" value={customer.productInterest || "未填写"} />
             <Info label="应用场景" value={customer.applicationScenario || "未填写"} />
             <Info label="工件/服务对象" value={customer.workpiece || "未填写"} />
             <Info label="现有机器人/设备" value={customer.robotModel || "未填写"} />
@@ -4531,7 +4242,6 @@ function EmptyState({ text }) {
 function viewTitle(view) {
   return {
     dashboard: "销售驾驶舱",
-    learning: "产品学习",
     pipeline: "机会漏斗",
     customers: "客户资产",
     leads: "线索池",
@@ -4546,7 +4256,6 @@ function viewTitle(view) {
 function viewSubtitle(view) {
   return {
     dashboard: "先看客户质量、销售风险和今天该做什么。",
-    learning: "快速掌握跨维的产品矩阵、客户群体和应用场景。",
     pipeline: "按阶段管理机会，估算成交概率。",
     customers: "看客户画像、痛点、预算、阶段和最近跟进。",
     leads: "检查来源质量、重复客户和待激活机会。",
