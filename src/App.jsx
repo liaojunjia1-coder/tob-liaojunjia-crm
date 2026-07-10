@@ -3,16 +3,20 @@ import {
   ArrowRight,
   Bell,
   Brain,
+  CalendarDays,
   Check,
+  ChevronRight,
   Circle,
   ClipboardList,
   Download,
   Edit3,
+  FileText,
   HandCoins,
   LayoutDashboard,
   Lock,
   LogOut,
   MessageSquare,
+  MoreHorizontal,
   Plus,
   Save,
   Search,
@@ -90,15 +94,22 @@ const FOLLOWUP_TEMPLATES = [
 ];
 
 const VIEWS = [
-  { id: "dashboard", label: "看板", icon: LayoutDashboard },
-  { id: "pipeline", label: "漏斗", icon: TrendingUp },
-  { id: "customers", label: "客户", icon: Users },
-  { id: "leads", label: "线索池", icon: Target },
-  { id: "followups", label: "跟进", icon: MessageSquare },
-  { id: "tasks", label: "计划", icon: Bell },
-  { id: "review", label: "复盘", icon: ClipboardList },
-  { id: "contracts", label: "合同与回款", icon: HandCoins },
+  { id: "dashboard", label: "今日工作台", shortLabel: "今日", icon: LayoutDashboard },
+  { id: "leads", label: "线索池", shortLabel: "线索", icon: Target },
+  { id: "customers", label: "客户", shortLabel: "客户", icon: Users },
+  { id: "pipeline", label: "销售漏斗", shortLabel: "漏斗", icon: TrendingUp },
+  { id: "followups", label: "跟进记录", shortLabel: "跟进", icon: MessageSquare },
+  { id: "tasks", label: "日周月计划", shortLabel: "计划", icon: CalendarDays },
+  { id: "contracts", label: "合同与回款", shortLabel: "合同", icon: HandCoins },
+  { id: "review", label: "销售复盘", shortLabel: "复盘", icon: ClipboardList },
 ];
+
+const NAV_GROUPS = [
+  { id: "customer", label: "客户经营", views: ["dashboard", "leads", "customers", "pipeline"] },
+  { id: "execution", label: "销售执行", views: ["followups", "tasks", "contracts", "review"] },
+];
+
+const MOBILE_VIEWS = ["dashboard", "customers", "followups", "tasks"];
 
 const emptyCustomer = {
   company: "",
@@ -480,6 +491,7 @@ function App() {
     () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true,
   );
   const [activeView, setActiveView] = useState("dashboard");
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [searchText, setSearchText] = useState("");
   const [stageFilter, setStageFilter] = useState("全部");
@@ -705,6 +717,7 @@ function App() {
 
   function go(view) {
     setShowCustomerForm(false);
+    setShowMobileMore(false);
     setActiveView(view);
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
   }
@@ -1576,29 +1589,36 @@ function App() {
           </div>
         </div>
         <nav className="nav-list" aria-label="主导航">
-          {VIEWS.map((view) => {
-            const Icon = view.icon;
-            return (
-              <button
-                className={activeView === view.id ? "nav-item active" : "nav-item"}
-                key={view.id}
-                onClick={() => go(view.id)}
-                type="button"
-              >
-                <Icon size={18} />
-                <span>{view.label}</span>
-              </button>
-            );
-          })}
+          {NAV_GROUPS.map((group) => (
+            <div className="nav-group" key={group.id}>
+              <span className="nav-group-label">{group.label}</span>
+              {group.views.map((viewId) => {
+                const view = VIEWS.find((item) => item.id === viewId);
+                const Icon = view.icon;
+                return (
+                  <button
+                    className={activeView === view.id ? "nav-item active" : "nav-item"}
+                    key={view.id}
+                    onClick={() => go(view.id)}
+                    type="button"
+                  >
+                    <Icon size={18} />
+                    <span>{view.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="sidebar-status">
           <div>
-            <span>本机保存</span>
+            <span>{CLOUD_MODE ? "本地优先" : "本机保存"}</span>
             <strong>{syncStatus}</strong>
           </div>
+          <div className="sidebar-sync-track"><span /></div>
           <div>
-            <span>备份</span>
-            <strong>{data.customers.length} 客户</strong>
+            <span>客户资产</span>
+            <strong>{data.customers.length} 位</strong>
           </div>
         </div>
       </aside>
@@ -1610,6 +1630,15 @@ function App() {
             <p>{viewSubtitle(activeView)}</p>
           </div>
           <div className="topbar-actions">
+            <label className="global-search">
+              <Search size={16} />
+              <input
+                onChange={(event) => setSearchText(event.target.value)}
+                onFocus={() => activeView !== "customers" && go("customers")}
+                placeholder="搜索客户、联系人或记录"
+                value={searchText}
+              />
+            </label>
             <span className="sync-pill">
               <ShieldCheck size={16} />
               {syncStatus}
@@ -1647,6 +1676,7 @@ function App() {
             onToggleTask={toggleTask}
             onViewContracts={() => go("contracts")}
             onViewCustomers={() => go("customers")}
+            onViewFollowups={() => go("followups")}
             onViewPipeline={() => go("pipeline")}
             onViewReview={() => go("review")}
             onViewTasks={() => go("tasks")}
@@ -1684,6 +1714,7 @@ function App() {
             onPickCustomer={setSelectedCustomerId}
             onPlanFollowup={startPlannedFollowup}
             onSavePlan={saveCustomerPlan}
+            onViewContracts={() => go("contracts")}
             priorityFilter={priorityFilter}
             riskFilter={riskFilter}
             customerSort={customerSort}
@@ -1821,7 +1852,65 @@ function App() {
           />
         )}
       </main>
+      <MobileNavigation
+        activeView={activeView}
+        onGo={go}
+        onMore={() => setShowMobileMore((current) => !current)}
+        showMore={showMobileMore}
+      />
     </div>
+  );
+}
+
+function MobileNavigation({ activeView, onGo, onMore, showMore }) {
+  const isMoreActive = !MOBILE_VIEWS.includes(activeView);
+  const moreViews = ["leads", "pipeline", "contracts", "review"];
+
+  return (
+    <>
+      {showMore && (
+        <div className="mobile-more-panel">
+          <div className="mobile-more-head">
+            <strong>更多功能</strong>
+            <button className="icon-button" onClick={onMore} title="关闭更多功能" type="button">
+              <X size={17} />
+            </button>
+          </div>
+          <div className="mobile-more-grid">
+            {moreViews.map((viewId) => {
+              const view = VIEWS.find((item) => item.id === viewId);
+              const Icon = view.icon;
+              return (
+                <button key={view.id} onClick={() => onGo(view.id)} type="button">
+                  <Icon size={19} />
+                  <span>{view.label}</span>
+                </button>
+              );
+            })}
+            <button onClick={() => onGo("settings")} type="button">
+              <Settings size={19} />
+              <span>设置与备份</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <nav className="mobile-tabbar" aria-label="手机主导航">
+        {MOBILE_VIEWS.map((viewId) => {
+          const view = VIEWS.find((item) => item.id === viewId);
+          const Icon = view.icon;
+          return (
+            <button className={activeView === view.id ? "active" : ""} key={view.id} onClick={() => onGo(view.id)} type="button">
+              <Icon size={18} />
+              <span>{view.shortLabel}</span>
+            </button>
+          );
+        })}
+        <button className={isMoreActive || showMore ? "active" : ""} onClick={onMore} type="button">
+          <MoreHorizontal size={19} />
+          <span>更多</span>
+        </button>
+      </nav>
+    </>
   );
 }
 
@@ -1834,73 +1923,120 @@ function DashboardView({
   onToggleTask,
   onViewContracts,
   onViewCustomers,
+  onViewFollowups,
   onViewPipeline,
   onViewReview,
   onViewTasks,
   onSaveSalesDiary,
 }) {
+  const todayLabel = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
+  const focusTasks = [...metrics.openTasks]
+    .sort(
+      (a, b) =>
+        priorityRank(a.priority) - priorityRank(b.priority) ||
+        String(a.dueDate || "9999-12-31").localeCompare(String(b.dueDate || "9999-12-31")),
+    )
+    .slice(0, 3);
+  const weeklyFollowups = data.activities.filter((activity) => {
+    const elapsed = daysSince(activity.date);
+    return elapsed !== null && elapsed >= 0 && elapsed <= 6;
+  });
+  const riskItems = data.customers
+    .map((customer) => ({ customer, risk: customerRisk(customer, data.activities, data.tasks) }))
+    .filter((item) => item.risk.level !== "good")
+    .sort((a, b) => riskRank(a.risk.level) - riskRank(b.risk.level));
+  const aWithoutPlan = data.customers.filter(
+    (customer) =>
+      customer.priority === "A" &&
+      !["已成交", "暂缓"].includes(customer.stage) &&
+      !data.tasks.some((task) => task.customerId === customer.id && !task.done),
+  );
+  const healthIssues = metrics.overdueTasks.length + riskItems.length + aWithoutPlan.length;
+  const healthScore = data.customers.length ? Math.max(0, 100 - Math.min(100, healthIssues * 8)) : 0;
+  const topRisk = riskItems[0];
+  const suggestion = topRisk
+    ? { customer: topRisk.customer, ...nextBestAction(topRisk.customer, data.activities, data.tasks) }
+    : null;
+
   return (
-    <section className="view">
-      <div className="metrics-grid">
-        <Metric title="日计划" value={metrics.dayPlans.length} detail="今天执行" />
-        <Metric title="周计划" value={metrics.weekPlans.length} detail="本周推进" />
-        <Metric title="月计划" value={metrics.monthPlans.length} detail="客户经营" />
-        <Metric title="高风险客户" value={metrics.atRisk.length} detail={`${metrics.overdueTasks.length} 个超期动作`} />
+    <section className="view v2-dashboard">
+      <div className="v2-dashboard-context">
+        <span>{todayLabel}</span>
+        <strong>先处理最可能影响成交的动作</strong>
       </div>
 
-      {data.customers.length === 0 ? (
-        <FirstRunGuide onAddCustomer={onAddCustomer} />
-      ) : (
-        <DashboardActionSummary
-          metrics={metrics}
-          onGeneratePlan={onGeneratePlan}
-          onViewContracts={onViewContracts}
-          onViewCustomers={onViewCustomers}
-          onViewReview={onViewReview}
-          onViewTasks={onViewTasks}
-        />
-      )}
-
-      <div className="content-grid">
-        <section className="surface">
-          <SectionHeader title="销售漏斗" action="查看漏斗" onClick={onViewPipeline} />
-          <PipelineStrip customers={data.customers} onPick={onPickCustomer} />
-        </section>
-        <section className="surface">
-          <SectionHeader title="最近操作" icon={Sparkles} />
-          <ActivityLog logs={data.logs} />
-        </section>
+      <div className="v2-metric-line">
+        <button onClick={onViewPipeline} type="button">
+          <span>本月管道金额</span><strong>{money(metrics.totalAmount)}</strong><small>{data.customers.length} 位客户</small>
+        </button>
+        <button onClick={onViewPipeline} type="button">
+          <span>加权预测</span><strong>{money(metrics.forecast)}</strong><small>{metrics.totalAmount ? `${Math.round((metrics.forecast / metrics.totalAmount) * 100)}% 管道` : "等待客户数据"}</small>
+        </button>
+        <button onClick={onViewFollowups} type="button">
+          <span>本周已跟进</span><strong>{weeklyFollowups.length}</strong><small>覆盖 {new Set(weeklyFollowups.map((item) => item.customerId)).size} 位客户</small>
+        </button>
+        <button onClick={onViewContracts} type="button">
+          <span>待回款</span><strong>{money(metrics.receivable)}</strong><small>{metrics.fileCount} 份合同资料</small>
+        </button>
       </div>
 
-      {metrics.openTasks.length > 0 && (
-        <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
-      )}
+      {data.customers.length === 0 && <FirstRunGuide onAddCustomer={onAddCustomer} />}
 
-      <BusinessHealth
-        data={data}
-        metrics={metrics}
-        onAddCustomer={onAddCustomer}
-        onGeneratePlan={onGeneratePlan}
-        onPickCustomer={onPickCustomer}
-        onViewTasks={onViewTasks}
-      />
+      <div className="v2-command-grid">
+        <section className="surface v2-focus-panel">
+          <div className="panel-heading">
+            <div><h3>今天必须完成</h3><p>按优先级、计划日期和客户风险自动排序</p></div>
+            <button className="ghost-button" onClick={onViewTasks} type="button">进入日计划 <ArrowRight size={15} /></button>
+          </div>
+          <div className="v2-focus-list">
+            {focusTasks.map((task) => (
+              <article className={`v2-focus-row task-priority-${task.priority}`} key={task.id}>
+                <button className="v2-check-button" onClick={() => onToggleTask(task.id)} title="标记完成" type="button"><Circle size={19} /></button>
+                <button className="v2-focus-main" disabled={!task.customerId} onClick={() => task.customerId && onPickCustomer(task.customerId)} type="button">
+                  <strong>{task.title}</strong>
+                  <span>{customerName(data.customers, task.customerId)} · {task.planType || "销售计划"}</span>
+                </button>
+                <div className="v2-focus-time"><span>{task.priority}优先</span><time>{task.dueDate || "未设日期"}</time></div>
+                <button className="icon-button" disabled={!task.customerId} onClick={() => task.customerId && onPickCustomer(task.customerId)} title="打开客户" type="button"><ChevronRight size={17} /></button>
+              </article>
+            ))}
+            {focusTasks.length === 0 && (
+              <div className="v2-focus-empty">
+                <Check size={22} />
+                <div><strong>今天没有待完成动作</strong><span>{data.customers.length ? "可以从风险客户生成一组今日计划。" : "建立客户后，关键动作会自动出现在这里。"}</span></div>
+                <button className="secondary-button" onClick={data.customers.length ? onGeneratePlan : onAddCustomer} type="button">{data.customers.length ? "生成今日动作" : "新增客户"}</button>
+              </div>
+            )}
+          </div>
+        </section>
 
-      <div className="content-grid dashboard-bottom-grid">
+        <aside className="v2-command-side">
+          <section className="surface v2-health-panel">
+            <div className="v2-health-head"><div><strong>客户池健康度</strong><span>{data.customers.filter((item) => !["已成交", "暂缓"].includes(item.stage)).length} 位活跃客户</span></div><b>{healthScore}<small>/100</small></b></div>
+            <div className="v2-health-track"><span style={{ width: `${healthScore}%` }} /></div>
+            <div className="v2-signal-list">
+              <button onClick={onViewTasks} type="button"><i className="risk" /><span>超期销售动作</span><em>{metrics.overdueTasks.length} 个</em><ChevronRight size={14} /></button>
+              <button onClick={() => (aWithoutPlan[0] ? onPickCustomer(aWithoutPlan[0].id) : onViewCustomers())} type="button"><i className="watch" /><span>A 类客户缺计划</span><em>{aWithoutPlan.length} 位</em><ChevronRight size={14} /></button>
+              <button onClick={() => (topRisk ? onPickCustomer(topRisk.customer.id) : onViewCustomers())} type="button"><i className="good" /><span>需要关注客户</span><em>{riskItems.length} 位</em><ChevronRight size={14} /></button>
+            </div>
+          </section>
+          <section className="v2-next-suggestion">
+            <span>下一步建议</span>
+            <h3>{suggestion ? `${suggestion.customer.company}：${suggestion.title}` : "客户推进节奏正常，可以补充新线索。"}</h3>
+            <p>{suggestion?.body || "优先建立真实客户并记录首次沟通结论。"}</p>
+            <button onClick={suggestion ? () => onPickCustomer(suggestion.customer.id) : onGeneratePlan} type="button">{suggestion ? "处理这位客户" : "生成今日动作"}</button>
+          </section>
+        </aside>
+      </div>
+
+      <section className="surface v2-pipeline-panel">
+        <div className="panel-heading"><div><h3>销售漏斗</h3><p>点击阶段查看客户，拖动客户可在完整漏斗中推进</p></div><button className="ghost-button" onClick={onViewPipeline} type="button">打开完整漏斗 <ArrowRight size={15} /></button></div>
+        <PipelineStrip customers={data.customers} onPick={onPickCustomer} />
+      </section>
+
+      <div className="v2-dashboard-lower">
         <SalesDiaryCard diary={data.salesDiary} onSave={onSaveSalesDiary} />
-        <section className="surface dashboard-utility-grid">
-          <button className="utility-card" onClick={onViewContracts} type="button">
-            <Upload size={18} />
-            <span>合同文件</span>
-            <strong>{metrics.fileCount}</strong>
-            <small>合同、照片、回款凭证</small>
-          </button>
-          <button className="utility-card" onClick={onViewReview} type="button">
-            <ClipboardList size={18} />
-            <span>复盘</span>
-            <strong>{data.activities.length}</strong>
-            <small>从真实跟进生成日报</small>
-          </button>
-        </section>
+        <section className="surface"><SectionHeader title="最近操作" action="进入复盘" onClick={onViewReview} /><ActivityLog logs={data.logs} /></section>
       </div>
     </section>
   );
@@ -2219,6 +2355,7 @@ function CustomersView({
   onPickCustomer,
   onPlanFollowup,
   onSavePlan,
+  onViewContracts,
   priorityFilter,
   riskFilter,
   customerSort,
@@ -2315,6 +2452,8 @@ function CustomersView({
               activities={activities}
               aiInsight={aiInsight}
               aiLoading={aiLoading}
+              contractFiles={data.contractFiles}
+              contracts={data.contracts}
               customer={customer}
               customers={data.customers}
               onAnalyze={onAnalyze}
@@ -2324,6 +2463,7 @@ function CustomersView({
               onFieldChange={onFieldChange}
               onPlanFollowup={onPlanFollowup}
               onSavePlan={onSavePlan}
+              onViewContracts={onViewContracts}
               tasks={data.tasks}
             />
           ) : (
@@ -3609,6 +3749,8 @@ function CustomerDetail({
   activities,
   aiInsight,
   aiLoading,
+  contractFiles,
+  contracts,
   customer,
   customers,
   onAnalyze,
@@ -3618,9 +3760,10 @@ function CustomerDetail({
   onFieldChange,
   onPlanFollowup,
   onSavePlan,
+  onViewContracts,
   tasks,
 }) {
-  const [detailTab, setDetailTab] = useState("客户资料");
+  const [detailTab, setDetailTab] = useState("总览");
   const risk = customerRisk(customer, activities, tasks);
   const recommendation = nextBestAction(customer, activities, tasks);
   const completeness = customerCompleteness(customer);
@@ -3635,9 +3778,13 @@ function CustomerDetail({
     planType: plan.planType || "不加入计划",
   });
   const [planDraft, setPlanDraft] = useState(() => loadFormDraft(planDraftKey, defaultPlanDraft()));
+  const customerContracts = contracts.filter((contract) => contract.customerId === customer.id);
+  const customerFiles = contractFiles.filter((file) => file.customerId === customer.id);
+  const customerTasks = tasks.filter((task) => task.customerId === customer.id);
 
   useEffect(() => {
     setPlanDraft(loadFormDraft(planDraftKey, defaultPlanDraft()));
+    setDetailTab("总览");
   }, [customer.id]);
 
   function updatePlanDraft(patch) {
@@ -3653,187 +3800,171 @@ function CustomerDetail({
     clearFormDraft(planDraftKey);
   }
 
+  const tabs = [
+    { id: "总览", label: "总览" },
+    { id: "跟进动态", label: `跟进动态 ${activities.length}` },
+    { id: "推进计划", label: `推进计划 ${customerTasks.filter((task) => !task.done).length}` },
+    { id: "文件与合同", label: `文件与合同 ${customerContracts.length + customerFiles.length}` },
+  ];
+
   return (
-    <>
-      <div className="detail-header">
+    <div className="v2-customer-detail">
+      <header className="v2-customer-header">
         <div>
-          <StageBadge stage={customer.stage} />
-          <h3>{customer.company}</h3>
-          <p>{customer.contact || "未填联系人"} · {customer.industry || "未填行业"}</p>
+          <div className="v2-customer-title-row">
+            <h3>{customer.company}</h3>
+            <span className={`priority-label priority-label-${customer.priority.toLowerCase()}`}>{customer.priority}类</span>
+            <StageBadge stage={customer.stage} compact />
+          </div>
+          <p>{customer.contact || "未填联系人"} · {customer.industry || "未填行业"} · {customer.phone || "未填联系方式"} · 最近跟进 {activities[0]?.date || "暂无"}</p>
         </div>
-        <div className="detail-actions">
-          <button className="icon-button" onClick={() => onEdit(customer)} title="编辑客户" type="button">
-            <Edit3 size={18} />
-          </button>
-          <button className="icon-button danger" onClick={() => onDelete(customer.id)} title="删除客户" type="button">
-            <Trash2 size={18} />
-          </button>
+        <div className="v2-customer-actions">
+          <button className="secondary-button" onClick={() => onPlanFollowup(customer.id)} type="button"><MessageSquare size={16} />记录跟进</button>
+          <button className="primary-button" onClick={() => setDetailTab("推进计划")} type="button"><CalendarDays size={16} />安排下一步</button>
+          <button className="icon-button" onClick={() => onEdit(customer)} title="编辑客户" type="button"><Edit3 size={17} /></button>
+          <button className="icon-button danger" onClick={() => onDelete(customer.id)} title="删除客户" type="button"><Trash2 size={17} /></button>
         </div>
-      </div>
+      </header>
 
-      <div className="segmented detail-tabs">
-        {["客户资料", "跟进动态"].map((tab) => (
-          <button className={detailTab === tab ? "active" : ""} key={tab} onClick={() => setDetailTab(tab)} type="button">
-            {tab}
-          </button>
+      <nav className="v2-detail-tabs" aria-label="客户工作区">
+        {tabs.map((tab) => (
+          <button className={detailTab === tab.id ? "active" : ""} key={tab.id} onClick={() => setDetailTab(tab.id)} type="button">{tab.label}</button>
         ))}
-      </div>
+      </nav>
 
-      {detailTab === "客户资料" && (
-        <>
-          <div className="completeness-card">
-            <div>
-              <span>档案完整度</span>
-              <strong>{completeness.score}%</strong>
-              <small>{completeness.missing.length ? `缺：${completeness.missing.join("、")}` : "关键资料已完整"}</small>
+      {detailTab === "总览" && (
+        <div className="v2-customer-overview">
+          <div className="v2-customer-primary">
+            <section className={`surface v2-next-action-card ${risk.level}`}>
+              <span className="eyebrow">当前推进重点</span>
+              <h4>{recommendation.title}</h4>
+              <p>{recommendation.body}</p>
+              <div className="v2-next-action-fields">
+                <label>
+                  下一步动作
+                  <input onChange={(event) => updatePlanDraft({ nextStep: event.target.value })} value={planDraft.nextStep} />
+                </label>
+                <label>
+                  计划日期
+                  <input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} />
+                </label>
+                <button className="primary-button" onClick={() => { updatePlanDraft({ planType: "日计划" }); setDetailTab("推进计划"); }} type="button">完善推进计划 <ArrowRight size={15} /></button>
+              </div>
+            </section>
+
+            <section className="surface v2-timeline-card">
+              <div className="panel-heading"><div><h3>销售时间线</h3><p>跟进、沟通结论和下一步统一保留</p></div><button className="ghost-button" onClick={() => setDetailTab("跟进动态")} type="button">查看全部 <ArrowRight size={15} /></button></div>
+              <Timeline activities={activities.slice(0, 3)} customers={customers} />
+            </section>
+
+            <div className="ai-actions v2-ai-actions">
+              <button className="secondary-button" disabled={aiLoading} onClick={() => onAnalyze(customer.id)} type="button"><Brain size={17} />{aiLoading ? "分析中" : "分析客户风险"}</button>
             </div>
-            <button className="secondary-button" onClick={() => onEdit(customer)} type="button">
-              <Edit3 size={16} />
-              补全
-            </button>
-          </div>
-          <div className="quick-controls">
-            <label>
-              阶段
-              <select onChange={(event) => onFieldChange(customer.id, "stage", event.target.value)} value={customer.stage}>
-                {STAGES.map((stage) => (
-                  <option key={stage.id}>{stage.id}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              评级
-              <select onChange={(event) => onFieldChange(customer.id, "priority", event.target.value)} value={customer.priority}>
-                {PRIORITIES.map((priority) => (
-                  <option key={priority}>{priority}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="detail-grid compact-detail-grid">
-            <Info label="来源" value={customer.source || "未填写"} />
-            <Info label="建档日期" value={customer.recordedAt || "未记录"} />
-            <Info label="客户评级" value={`${customer.priority}类`} />
-            <Info label="联系方式" value={customer.phone || "未填写"} />
+            {aiInsight && <AiInsight insight={aiInsight} />}
           </div>
 
-          <ProjectRequirements customer={customer} onEdit={() => onEdit(customer)} />
-        </>
-      )}
+          <aside className="surface v2-customer-info-panel">
+            <section className="v2-info-block">
+              <div className="v2-info-title"><strong>商机概况</strong><button onClick={() => onEdit(customer)} type="button">编辑</button></div>
+              <div className="v2-info-grid">
+                <Info label="预计金额" value={money(customer.amount)} />
+                <Info label="加权预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
+                <Info label="来源" value={customer.source || "未填写"} />
+                <Info label="建档日期" value={customer.recordedAt || "未记录"} />
+                <Info label="核心痛点" value={customer.painPoint || "未填写"} />
+                <Info label="竞品" value={customer.competitor || "未确认"} />
+              </div>
+            </section>
 
-      {detailTab === "客户资料" && (
-        <>
-          <div className="detail-group-title">商机判断</div>
-          <div className="detail-grid">
-            <Info label="预计金额" value={money(customer.amount)} />
-            <Info label="成交预测" value={money(Number(customer.amount || 0) * (stageMeta(customer.stage).probability / 100))} />
-            <Info label="核心痛点" value={customer.painPoint || "未填写"} />
-            <Info label="决策链" value={customer.decisionMaker || "未填写"} />
-            <Info label="竞品/替代方案" value={customer.competitor || "未填写"} />
-            <Info label="标签" value={customer.tags || "暂无标签"} />
-          </div>
-        </>
-      )}
+            <section className="v2-info-block">
+              <div className="v2-info-title"><strong>关键联系人</strong><button onClick={() => onEdit(customer)} type="button">补充</button></div>
+              <div className="v2-contact-list">
+                <article><span>{String(customer.contact || "待").slice(0, 1)}</span><div><strong>{customer.contact || "主要联系人待补齐"}</strong><small>{customer.phone || "尚未填写联系方式"}</small></div><em>主要沟通人</em></article>
+                <article><span>{String(customer.technicalContact || "技").slice(0, 1)}</span><div><strong>{customer.technicalContact || "技术联系人待补齐"}</strong><small>技术条件与测试材料</small></div><em>影响者</em></article>
+                <article><span>{String(customer.decisionMaker || "审").slice(0, 1)}</span><div><strong>{customer.decisionMaker || "最终审批人待补齐"}</strong><small>预算、合同与最终决策</small></div><em>决策人</em></article>
+              </div>
+            </section>
 
-      <div className={`advice-box ${risk.level}`}>
-        <Sparkles size={18} />
-        <div>
-          <strong>{recommendation.title}</strong>
-          <p>{recommendation.body}</p>
-        </div>
-      </div>
+            <section className="v2-info-block">
+              <div className="v2-info-title"><strong>项目需求</strong><button onClick={() => onEdit(customer)} type="button">查看全部</button></div>
+              <div className="v2-info-grid">
+                <Info label="应用场景" value={customer.applicationScenario || "未填写"} />
+                <Info label="服务对象" value={customer.workpiece || "未填写"} />
+                <Info label="精度要求" value={customer.accuracyRequirement || "未填写"} />
+                <Info label="节拍要求" value={customer.cycleRequirement || "未填写"} />
+                <Info label="测试材料" value={customer.testMaterials || "未填写"} />
+                <Info label="时间窗口" value={customer.projectTimeline || "未填写"} />
+              </div>
+            </section>
 
-      <div className="customer-plan-card">
-        <div className="plan-head editable-plan-head">
-          <div>
-            <span className="eyebrow">客户推进计划</span>
-            <h4>{customer.company} · {customer.stage}</h4>
-          </div>
-          <strong>{customer.priority}类 / {customer.stage}</strong>
-        </div>
-        <div className="editable-plan-grid">
-          <label className="wide">
-            下一步动作
-            <input
-              onChange={(event) => updatePlanDraft({ nextStep: event.target.value })}
-              value={planDraft.nextStep}
-            />
-          </label>
-          <label>
-            跟进方式
-            <select onChange={(event) => updatePlanDraft({ method: event.target.value })} value={planDraft.method}>
-              {METHODS.map((method) => (
-                <option key={method}>{method}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            计划日期
-            <input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} />
-          </label>
-          <label>
-            优先级
-            <select onChange={(event) => updatePlanDraft({ priority: event.target.value })} value={planDraft.priority}>
-              {TASK_PRIORITIES.map((priority) => (
-                <option key={priority}>{priority}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            状态
-            <select onChange={(event) => updatePlanDraft({ status: event.target.value })} value={planDraft.status}>
-              {PLAN_STATUSES.map((status) => (
-                <option key={status}>{status}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="plan-type-picker">
-          {["不加入计划", ...PLAN_TYPES].map((type) => (
-            <button
-              className={planDraft.planType === type ? "active" : ""}
-              key={type}
-              onClick={() => updatePlanDraft({ planType: type })}
-              type="button"
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-        <div className="plan-actions">
-          <button className="secondary-button" onClick={() => onPlanFollowup(customer.id)} type="button">
-            <MessageSquare size={17} />
-            记录跟进
-          </button>
-          <button className="secondary-button" onClick={() => onCopyPlan(customer.id)} type="button">
-            <ClipboardList size={17} />
-            复制计划
-          </button>
-          <button className="primary-button" onClick={savePlan} type="button">
-            <Save size={17} />
-            保存计划
-          </button>
-        </div>
-      </div>
-
-      <div className="ai-actions">
-        <button className="secondary-button" disabled={aiLoading} onClick={() => onAnalyze(customer.id)} type="button">
-          <Brain size={18} />
-          {aiLoading ? "分析中" : "AI分析客户"}
-        </button>
-      </div>
-
-      {aiInsight && <AiInsight insight={aiInsight} />}
-
-      {detailTab === "客户资料" && (
-        <div className="note-box">
-          <strong>备注</strong>
-          <p>{customer.note || "暂无备注"}</p>
+            <section className="v2-completeness-row">
+              <div><span>档案完整度</span><strong>{completeness.score}%</strong></div>
+              <div className="readiness-track"><span style={{ width: `${completeness.score}%` }} /></div>
+              <small>{completeness.missing.length ? `待补：${completeness.missing.join("、")}` : "关键资料已完整"}</small>
+            </section>
+          </aside>
         </div>
       )}
 
-      {detailTab === "跟进动态" && <Timeline activities={activities} customers={customers} />}
-    </>
+      {detailTab === "跟进动态" && (
+        <section className="surface v2-tab-surface">
+          <div className="panel-heading"><div><h3>全部跟进动态</h3><p>每次沟通都保留结论、时间和下一步。</p></div><button className="primary-button" onClick={() => onPlanFollowup(customer.id)} type="button"><Plus size={16} />记录跟进</button></div>
+          <Timeline activities={activities} customers={customers} />
+        </section>
+      )}
+
+      {detailTab === "推进计划" && (
+        <CustomerPlanEditor
+          customer={customer}
+          onCopyPlan={onCopyPlan}
+          onPlanFollowup={onPlanFollowup}
+          onSave={savePlan}
+          planDraft={planDraft}
+          updatePlanDraft={updatePlanDraft}
+        />
+      )}
+
+      {detailTab === "文件与合同" && (
+        <section className="surface v2-tab-surface">
+          <div className="panel-heading"><div><h3>文件与合同</h3><p>合同、报价单、回款凭证和拜访照片统一归档。</p></div><button className="primary-button" onClick={onViewContracts} type="button"><FileText size={16} />进入合同管理</button></div>
+          <div className="v2-file-overview">
+            <article><span>合同记录</span><strong>{customerContracts.length}</strong><small>{money(customerContracts.reduce((sum, item) => sum + Number(item.amount || 0), 0))} 合同金额</small></article>
+            <article><span>客户文件</span><strong>{customerFiles.length}</strong><small>合同、图片与回款凭证</small></article>
+            <article><span>待回款</span><strong>{money(customerContracts.reduce((sum, item) => sum + Math.max(0, Number(item.amount || 0) - Number(item.paidAmount || 0)), 0))}</strong><small>点击进入处理回款节点</small></article>
+          </div>
+          <div className="contract-list">
+            {customerContracts.map((contract) => (
+              <article className="contract-card" key={contract.id}><div><span className="contract-status">{contract.status}</span><strong>{contract.title}</strong><small>{contract.contractNo || "未填编号"}</small></div><div className="contract-money"><strong>{money(contract.amount)}</strong><small>{contract.paymentDue || "未设回款日期"}</small></div></article>
+            ))}
+            {!customerContracts.length && <EmptyState action="新增合同或上传文件" onAction={onViewContracts} text="该客户还没有合同、报价单或回款记录" />}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function CustomerPlanEditor({ customer, onCopyPlan, onPlanFollowup, onSave, planDraft, updatePlanDraft }) {
+  return (
+    <section className="surface v2-tab-surface customer-plan-card">
+      <div className="plan-head editable-plan-head">
+        <div><span className="eyebrow">客户推进计划</span><h4>{customer.company} · {customer.stage}</h4></div>
+        <strong>{customer.priority}类 / {customer.stage}</strong>
+      </div>
+      <div className="editable-plan-grid">
+        <label className="wide">下一步动作<input onChange={(event) => updatePlanDraft({ nextStep: event.target.value })} value={planDraft.nextStep} /></label>
+        <label>跟进方式<select onChange={(event) => updatePlanDraft({ method: event.target.value })} value={planDraft.method}>{METHODS.map((method) => <option key={method}>{method}</option>)}</select></label>
+        <label>计划日期<input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} /></label>
+        <label>优先级<select onChange={(event) => updatePlanDraft({ priority: event.target.value })} value={planDraft.priority}>{TASK_PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}</select></label>
+        <label>状态<select onChange={(event) => updatePlanDraft({ status: event.target.value })} value={planDraft.status}>{PLAN_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
+      </div>
+      <div className="plan-type-picker">{["不加入计划", ...PLAN_TYPES].map((type) => <button className={planDraft.planType === type ? "active" : ""} key={type} onClick={() => updatePlanDraft({ planType: type })} type="button">{type}</button>)}</div>
+      <div className="plan-actions">
+        <button className="secondary-button" onClick={() => onPlanFollowup(customer.id)} type="button"><MessageSquare size={17} />记录跟进</button>
+        <button className="secondary-button" onClick={() => onCopyPlan(customer.id)} type="button"><ClipboardList size={17} />复制计划</button>
+        <button className="primary-button" onClick={onSave} type="button"><Save size={17} />保存计划</button>
+      </div>
+    </section>
   );
 }
 
@@ -4097,12 +4228,12 @@ function EmptyState({ action, onAction, text }) {
 
 function viewTitle(view) {
   return {
-    dashboard: "销售驾驶舱",
-    pipeline: "机会漏斗",
-    customers: "客户资产",
+    dashboard: "今日工作台",
+    pipeline: "销售漏斗",
+    customers: "客户",
     leads: "线索池",
     followups: "跟进记录",
-    tasks: "计划中心",
+    tasks: "日周月计划",
     review: "销售复盘",
     contracts: "合同与回款",
     settings: "设置与个人中心",
@@ -4111,13 +4242,13 @@ function viewTitle(view) {
 
 function viewSubtitle(view) {
   return {
-    dashboard: "先看客户质量、销售风险和今天该做什么。",
-    pipeline: "按阶段管理机会，估算成交概率。",
-    customers: "看客户画像、痛点、预算、阶段和最近跟进。",
-    leads: "检查来源质量、重复客户和待激活机会。",
+    dashboard: "先完成关键动作，再处理客户风险。",
+    pipeline: "按阶段查看管道金额、停滞机会和成交概率。",
+    customers: "从总览、时间线和推进计划经营每一位客户。",
+    leads: "按来源、评级和行动建议筛选潜在客户。",
     followups: "每次沟通都留下结论和下一步动作。",
     tasks: "按日、周、月管理销售动作。",
-    review: "自动生成日报，检查今天动作是否闭环。",
+    review: "从真实跟进和计划完成情况生成日报与复盘。",
     contracts: "记录合同金额、回款节点、合同文件和现场照片。",
     settings: "账号、密码、提醒和数据偏好都在这里。",
   }[view];
