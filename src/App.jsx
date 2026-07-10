@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bell,
-  BookOpen,
   Brain,
   Check,
   Circle,
@@ -1639,6 +1638,7 @@ function App() {
           <DashboardView
             data={data}
             metrics={metrics}
+            onAddCustomer={openNewCustomerForm}
             onGeneratePlan={generateDailyPlan}
             onPickCustomer={(id) => {
               setSelectedCustomerId(id);
@@ -1675,6 +1675,7 @@ function App() {
             customer={selectedCustomer}
             customers={filteredCustomers}
             data={data}
+            onAddCustomer={openNewCustomerForm}
             onAnalyze={analyzeCustomer}
             onCopyPlan={copyCustomerPlan}
             onDelete={deleteCustomer}
@@ -1701,6 +1702,7 @@ function App() {
           <LeadCenterView
             activities={data.activities}
             customers={data.customers}
+            onAddCustomer={openNewCustomerForm}
             onCreateTask={createLeadFollowTask}
             onPickCustomer={(id) => {
               setSelectedCustomerId(id);
@@ -1716,6 +1718,7 @@ function App() {
             activityForm={activityForm}
             customers={data.customers}
             followupAi={followupAi}
+            onAddCustomer={openNewCustomerForm}
             onAcceptAi={(suggestion) =>
               setActivityForm((form) => ({ ...form, nextStep: suggestion.nextStep }))
             }
@@ -1783,7 +1786,6 @@ function App() {
           />
         )}
 
-        {activeView === "playbook" && <PlaybookView />}
         {activeView === "settings" && (
           <SettingsView
             backupStatus={backupStatus}
@@ -1826,6 +1828,7 @@ function App() {
 function DashboardView({
   data,
   metrics,
+  onAddCustomer,
   onGeneratePlan,
   onPickCustomer,
   onToggleTask,
@@ -1845,14 +1848,18 @@ function DashboardView({
         <Metric title="高风险客户" value={metrics.atRisk.length} detail={`${metrics.overdueTasks.length} 个超期动作`} />
       </div>
 
-      <DashboardActionSummary
-        metrics={metrics}
-        onGeneratePlan={onGeneratePlan}
-        onViewContracts={onViewContracts}
-        onViewCustomers={onViewCustomers}
-        onViewReview={onViewReview}
-        onViewTasks={onViewTasks}
-      />
+      {data.customers.length === 0 ? (
+        <FirstRunGuide onAddCustomer={onAddCustomer} />
+      ) : (
+        <DashboardActionSummary
+          metrics={metrics}
+          onGeneratePlan={onGeneratePlan}
+          onViewContracts={onViewContracts}
+          onViewCustomers={onViewCustomers}
+          onViewReview={onViewReview}
+          onViewTasks={onViewTasks}
+        />
+      )}
 
       <div className="content-grid">
         <section className="surface">
@@ -1865,17 +1872,22 @@ function DashboardView({
         </section>
       </div>
 
-      <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
+      {metrics.openTasks.length > 0 && (
+        <PriorityActions data={data} onPickCustomer={onPickCustomer} onToggleTask={onToggleTask} onViewTasks={onViewTasks} />
+      )}
+
+      <BusinessHealth
+        data={data}
+        metrics={metrics}
+        onAddCustomer={onAddCustomer}
+        onGeneratePlan={onGeneratePlan}
+        onPickCustomer={onPickCustomer}
+        onViewTasks={onViewTasks}
+      />
 
       <div className="content-grid dashboard-bottom-grid">
         <SalesDiaryCard diary={data.salesDiary} onSave={onSaveSalesDiary} />
         <section className="surface dashboard-utility-grid">
-          <button className="utility-card" onClick={onViewCustomers} type="button">
-            <Users size={18} />
-            <span>客户健康度</span>
-            <strong>{Math.max(0, 100 - metrics.atRisk.length * 12)}</strong>
-            <small>{metrics.atRisk.length} 个高风险客户</small>
-          </button>
           <button className="utility-card" onClick={onViewContracts} type="button">
             <Upload size={18} />
             <span>合同文件</span>
@@ -1890,6 +1902,27 @@ function DashboardView({
           </button>
         </section>
       </div>
+    </section>
+  );
+}
+
+function FirstRunGuide({ onAddCustomer }) {
+  return (
+    <section className="surface first-run-guide">
+      <div>
+        <span className="eyebrow">从 0 开始</span>
+        <h3>先建立第一位真实客户</h3>
+        <p>客户建档后，跟进、计划、漏斗和复盘才会围绕同一条销售机会自动串起来。</p>
+      </div>
+      <div className="first-run-steps" aria-label="首次使用步骤">
+        <span><strong>1</strong>建立客户档案</span>
+        <span><strong>2</strong>记录沟通结论</span>
+        <span><strong>3</strong>安排下一步计划</span>
+      </div>
+      <button className="primary-button" onClick={onAddCustomer} type="button">
+        <UserPlus size={17} />
+        新增第一位客户
+      </button>
     </section>
   );
 }
@@ -2022,40 +2055,52 @@ function PriorityActions({ data, onPickCustomer, onToggleTask, onViewTasks }) {
   );
 }
 
-function BusinessHealth({ data, metrics, onGeneratePlan }) {
-  const stageCount = new Set(data.customers.map((customer) => customer.stage)).size;
-  const customerText = data.customers
-    .map((customer) => `${customer.industry} ${customer.tags} ${customer.note}`)
-    .join(" ");
-  const checks = [
+function BusinessHealth({ data, metrics, onAddCustomer, onGeneratePlan, onPickCustomer, onViewTasks }) {
+  const today = todayInputValue();
+  const activeCustomers = data.customers.filter((customer) => !["已成交", "暂缓"].includes(customer.stage));
+  const aWithoutPlan = activeCustomers.filter(
+    (customer) => customer.priority === "A" && !data.tasks.some((task) => task.customerId === customer.id && !task.done),
+  );
+  const staleCustomers = activeCustomers.filter((customer) => {
+    const latest = data.activities
+      .filter((activity) => activity.customerId === customer.id)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+    const inactiveDays = daysSince(latest?.date);
+    return (!latest && customer.stage !== "新线索") || (inactiveDays !== null && inactiveDays >= 14);
+  });
+  const incompleteCustomers = activeCustomers.filter((customer) => customerCompleteness(customer).score < 50);
+  const issues = [
     {
-      done: data.customers.length >= 5,
-      title: "客户样本充足",
-      detail: `${data.customers.length} 个客户，能体现销售池管理。`,
+      count: metrics.overdueTasks.length,
+      detail: !data.customers.length ? "暂无客户数据，建档后开始检查。" : metrics.overdueTasks.length ? "计划日期已过，需要重新安排或完成。" : "当前没有超期动作。",
+      onClick: data.customers.length ? onViewTasks : onAddCustomer,
+      title: "超期动作",
+      tone: "risk",
     },
     {
-      done: /SaaS|企业服务/i.test(customerText) && /工业|制造|自动化/.test(customerText) && /外贸|海外|询盘/.test(customerText),
-      title: "客户场景覆盖",
-      detail: "覆盖 SaaS、工业自动化、外贸三类客户场景。",
+      count: aWithoutPlan.length,
+      detail: !data.customers.length ? "暂无客户数据，建档后开始检查。" : aWithoutPlan.length ? "A 类客户没有明确的下一步。" : "A 类客户都有推进计划。",
+      onClick: data.customers.length ? () => (aWithoutPlan[0] ? onPickCustomer(aWithoutPlan[0].id) : onViewTasks()) : onAddCustomer,
+      title: "A 类无计划",
+      tone: "watch",
     },
     {
-      done: data.activities.length >= data.customers.length,
-      title: "跟进记录完整",
-      detail: `${data.activities.length} 条跟进，能说明沟通结论和下一步。`,
+      count: staleCustomers.length,
+      detail: !data.customers.length ? "暂无客户数据，建档后开始检查。" : staleCustomers.length ? "超过 14 天未联系，或推进后没有跟进记录。" : "客户联系节奏正常。",
+      onClick: data.customers.length ? () => (staleCustomers[0] ? onPickCustomer(staleCustomers[0].id) : onViewTasks()) : onAddCustomer,
+      title: "久未跟进",
+      tone: "blue",
     },
     {
-      done: metrics.openTasks.length >= 4,
-      title: "行动闭环清晰",
-      detail: `${metrics.openTasks.length} 个未完成计划，体现销售推进节奏。`,
-    },
-    {
-      done: stageCount >= 4,
-      title: "销售阶段可讲",
-      detail: `${stageCount} 个阶段有客户，适合讲漏斗推进。`,
+      count: incompleteCustomers.length,
+      detail: !data.customers.length ? "暂无客户数据，建档后开始检查。" : incompleteCustomers.length ? "联系方式、金额、痛点或决策链信息不足。" : "关键客户资料较完整。",
+      onClick: data.customers.length ? () => (incompleteCustomers[0] ? onPickCustomer(incompleteCustomers[0].id) : onViewTasks()) : onAddCustomer,
+      title: "资料待补齐",
+      tone: "violet",
     },
   ];
-  const passed = checks.filter((item) => item.done).length;
-  const score = Math.round((passed / checks.length) * 100);
+  const totalIssues = issues.reduce((sum, item) => sum + item.count, 0);
+  const score = data.customers.length ? Math.max(0, Math.round(100 - Math.min(100, totalIssues * 12))) : 0;
 
   return (
     <section className="surface self-check">
@@ -2063,60 +2108,40 @@ function BusinessHealth({ data, metrics, onGeneratePlan }) {
         <div>
           <span className="eyebrow">运营体检</span>
           <h3>客户池健康度</h3>
-          <p>系统自动检查客户、跟进、计划和阶段覆盖，帮助你判断今天该优先处理什么。</p>
+          <p>按今天 {today} 的客户、跟进和计划数据检查。点问题卡片可直接处理。</p>
         </div>
         <div className="health-actions">
           <div className="readiness-score">
             <strong>{score}</strong>
             <span>健康度</span>
           </div>
-          <button className="secondary-button" onClick={onGeneratePlan} type="button">
-            <Bell size={16} />
-            生成日计划
-          </button>
+          {data.customers.length ? (
+            <button className="secondary-button" onClick={onGeneratePlan} type="button">
+              <Bell size={16} />
+              补齐日计划
+            </button>
+          ) : (
+            <button className="primary-button" onClick={onAddCustomer} type="button">
+              <UserPlus size={16} />
+              新增客户
+            </button>
+          )}
         </div>
       </div>
       <div className="readiness-track">
         <span style={{ width: `${score}%` }} />
       </div>
-      <div className="self-check-grid">
-        {checks.map((item) => (
-          <article className={item.done ? "check-card done" : "check-card"} key={item.title}>
-            {item.done ? <Check size={17} /> : <Circle size={17} />}
+      <div className="health-check-grid">
+        {issues.map((item) => (
+          <button className={`health-check-card ${item.tone}${item.count === 0 ? " clear" : ""}`} key={item.title} onClick={item.onClick} type="button">
             <div>
               <strong>{item.title}</strong>
               <span>{item.detail}</span>
             </div>
-          </article>
+            <em>{item.count}</em>
+            <ArrowRight size={16} />
+          </button>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function BusinessGuide() {
-  return (
-    <section className="surface demo-guide">
-      <div>
-        <span className="eyebrow">工作台</span>
-        <h3>围绕客户、跟进和下一步管理销售节奏</h3>
-        <p>
-          每个客户都保留来源、阶段、金额、沟通记录和计划动作，方便每天快速判断机会进展和风险。
-        </p>
-      </div>
-      <div className="demo-points">
-        <article>
-          <strong>客户画像</strong>
-          <span>覆盖 SaaS、工业自动化、外贸制造三类客户场景。</span>
-        </article>
-        <article>
-          <strong>跟进节奏</strong>
-          <span>每次沟通都留下痛点、决策链、预算和下一步。</span>
-        </article>
-        <article>
-          <strong>行动闭环</strong>
-          <span>把报价、复盘、二次沟通变成计划提醒，避免销售动作断档。</span>
-        </article>
       </div>
     </section>
   );
@@ -2185,6 +2210,7 @@ function CustomersView({
   customer,
   customers,
   data,
+  onAddCustomer,
   onAnalyze,
   onCopyPlan,
   onDelete,
@@ -2268,7 +2294,18 @@ function CustomersView({
                 </button>
               );
             })}
-            {customers.length === 0 && <EmptyState text="没有匹配的客户" />}
+            {customers.length === 0 && (
+              <EmptyState
+                action={data.customers.length ? "清除筛选后查看" : "新增第一位客户"}
+                onAction={data.customers.length ? () => {
+                  setSearchText("");
+                  setStageFilter("全部");
+                  setPriorityFilter("全部评级");
+                  setRiskFilter("全部风险");
+                } : onAddCustomer}
+                text={data.customers.length ? "当前筛选下没有客户" : "客户池还是空的，先建立第一位客户"}
+              />
+            )}
           </div>
         </section>
 
@@ -2290,7 +2327,7 @@ function CustomersView({
               tasks={data.tasks}
             />
           ) : (
-            <EmptyState text="先新增一个客户" />
+            <EmptyState action="新增客户" onAction={onAddCustomer} text="选择客户后，这里会显示画像、推进计划和跟进动态" />
           )}
         </section>
       </div>
@@ -2298,7 +2335,7 @@ function CustomersView({
   );
 }
 
-function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, onStageChange, tasks }) {
+function LeadCenterView({ activities, customers, onAddCustomer, onCreateTask, onPickCustomer, onStageChange, tasks }) {
   const [activeSource, setActiveSource] = useState("全部来源");
   const [activeStatus, setActiveStatus] = useState("A类");
   const [selectedLeadId, setSelectedLeadId] = useState(customers[0]?.id || "");
@@ -2414,7 +2451,13 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
                 <em>{score}</em>
               </button>
             ))}
-            {filteredLeadItems.length === 0 && <EmptyState text="当前筛选下没有线索" />}
+            {filteredLeadItems.length === 0 && (
+              <EmptyState
+                action={customers.length ? "查看 A 类线索" : "新增第一条线索"}
+                onAction={customers.length ? () => setActiveStatus("A类") : onAddCustomer}
+                text={customers.length ? "当前分层下没有线索" : "线索池为空，新增客户后会自动进入这里"}
+              />
+            )}
           </div>
 
           <aside className="lead-detail-card">
@@ -2456,7 +2499,7 @@ function LeadCenterView({ activities, customers, onCreateTask, onPickCustomer, o
                 </div>
               </>
             ) : (
-              <EmptyState text="请选择一个线索" />
+              <EmptyState action="新增线索" onAction={onAddCustomer} text="选择线索后，这里会给出评分、风险和建议动作" />
             )}
           </aside>
         </div>
@@ -2676,218 +2719,11 @@ function ContractsView({
   );
 }
 
-function PlaybookView() {
-  const [callText, setCallText] = useState("");
-  const [callScenario, setCallScenario] = useState("需求确认");
-  const [reviewDraft, setReviewDraft] = useState(loadReviewDraft);
-  const [toolTab, setToolTab] = useState("对话诊断");
-  const diagnosis = useMemo(() => buildSalesCallDiagnosis(callText, callScenario), [callText, callScenario]);
-  const spinCards = [
-    {
-      title: "S 情况问题",
-      body: "先弄清客户现状，不急着讲产品。",
-      examples: ["现在客户线索从哪里来？", "报价后谁负责继续跟？", "你们现在用什么方式记录客户？"],
-    },
-    {
-      title: "P 问题问题",
-      body: "找出当前流程里真实不舒服的地方。",
-      examples: ["现在最容易丢单的是哪个环节？", "新人跟进不稳定会带来什么问题？", "主管最难看到哪些过程？"],
-    },
-    {
-      title: "I 影响问题",
-      body: "把问题放大到成本、效率、风险和老板关注点。",
-      examples: ["如果报价后 3 天没人跟，会影响多少订单？", "销售过程不可见，会让管理成本增加在哪里？"],
-    },
-    {
-      title: "N 回报问题",
-      body: "让客户自己说出解决后的价值。",
-      examples: ["如果自动提醒能减少漏跟，你最想先改善哪个团队？", "如果下周试点，你希望看到哪 3 个指标？"],
-    },
-  ];
-  const skillCards = [
-    { title: "销售录音诊断", body: "从录音转写里检查开场、需求挖掘、价值传递、异议处理和成交推动。" },
-    { title: "客户画像", body: "整理关键人角色、决策权重、预算信号、核心痛点和潜在诉求。" },
-    { title: "拜访纪要", body: "把聊天记录或会议内容整理为结论、决议项、待澄清问题和下一步动作。" },
-    { title: "需求提炼", body: "区分显性需求、隐性需求、未满足需求，避免只记录客户表面说法。" },
-    { title: "商务风险", body: "识别长账期、过度承诺、竞品介入、交付范围不清和回款风险。" },
-    { title: "客户归档", body: "把本次沟通沉淀为 CRM 更新项：痛点、决策链、阶段、计划和风险。" },
-  ];
-
-  function updateReviewDraft(field, value) {
-    const nextDraft = { ...reviewDraft, [field]: value };
-    setReviewDraft(nextDraft);
-    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
-  }
-
-  function clearReviewDraft() {
-    const nextDraft = emptyReviewDraft();
-    setReviewDraft(nextDraft);
-    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
-  }
-
-  function writeDiagnosisToReview() {
-    const weakItems = diagnosis.items.filter((item) => !item.hit).map((item) => `${item.title}：${item.text}`);
-    const strongItems = diagnosis.items.filter((item) => item.hit).map((item) => item.title);
-    const nextDraft = {
-      conclusion: `${callScenario}诊断分 ${diagnosis.score}，${diagnosis.level}。`,
-      blocker: weakItems.length ? weakItems.join("\n") : "本次沟通主要动作完整，下一步重点是持续推进客户承诺。",
-      nextStep: "把未完成项拆成计划，并在下次沟通前补齐。",
-      ability: strongItems.length ? `做得较好：${strongItems.join("、")}。` : "需要先补齐开场目标、需求挖掘、价值传递和下一步动作。",
-    };
-    setReviewDraft(nextDraft);
-    window.localStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify(nextDraft));
-  }
-
-  return (
-    <section className="view">
-      <div className="segmented tool-tabs">
-        {["对话诊断", "销售方法论"].map((tab) => (
-          <button className={toolTab === tab ? "active" : ""} key={tab} onClick={() => setToolTab(tab)} type="button">
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {toolTab === "对话诊断" && (
-        <>
-          <section className="surface call-analyzer">
-            <div className="panel-heading">
-              <div>
-                <h3>销售录音复盘</h3>
-                <p>粘贴 WorkBuddy、微信或会议软件的录音转写文本，系统按销售诊断框架给出问题和下一步。</p>
-              </div>
-              <Brain size={18} />
-            </div>
-            <div className="call-analyzer-grid">
-              <div className="call-input-panel">
-                <label>
-                  沟通场景
-                  <select onChange={(event) => setCallScenario(event.target.value)} value={callScenario}>
-                    {["初次接触", "需求确认", "方案报价", "商务谈判", "签约推进", "客户回访"].map((item) => (
-                      <option key={item}>{item}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  录音转写 / 会议纪要
-                  <textarea
-                    onChange={(event) => setCallText(event.target.value)}
-                    placeholder="把销售和客户的对话粘贴到这里。例如：客户说现在报价后经常没人跟，老板想看销售过程；你问了预算，但没有确认谁拍板..."
-                    rows="10"
-                    value={callText}
-                  />
-                </label>
-              </div>
-              <div className="diagnosis-panel">
-                <div className="diagnosis-score">
-                  <span>诊断分</span>
-                  <strong>{diagnosis.score}</strong>
-                  <small>{diagnosis.level}</small>
-                </div>
-                <button className="secondary-button" disabled={!callText.trim()} onClick={writeDiagnosisToReview} type="button">
-                  <Save size={16} />
-                  写入复盘
-                </button>
-                <div className="diagnosis-list">
-                  {diagnosis.items.map((item) => (
-                    <article className={item.hit ? "diagnosis-item hit" : "diagnosis-item"} key={item.title}>
-                      <strong>{item.title}</strong>
-                      <span>{item.text}</span>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="surface">
-            <div className="panel-heading">
-              <h3>销售复盘</h3>
-              <button className="ghost-button" onClick={clearReviewDraft} type="button">
-                <X size={16} />
-                清空
-              </button>
-            </div>
-            <div className="review-form">
-              <label>
-                本次沟通结论
-                <textarea
-                  onChange={(event) => updateReviewDraft("conclusion", event.target.value)}
-                  placeholder="客户现在最在意什么？本次聊清楚了什么？"
-                  rows="3"
-                  value={reviewDraft.conclusion}
-                />
-              </label>
-              <label>
-                推进阻力
-                <textarea
-                  onChange={(event) => updateReviewDraft("blocker", event.target.value)}
-                  placeholder="预算、时机、竞品、决策链，哪一项卡住？"
-                  rows="3"
-                  value={reviewDraft.blocker}
-                />
-              </label>
-              <label>
-                下一步动作
-                <textarea
-                  onChange={(event) => updateReviewDraft("nextStep", event.target.value)}
-                  placeholder="谁、什么时间、完成什么材料或确认什么问题？"
-                  rows="3"
-                  value={reviewDraft.nextStep}
-                />
-              </label>
-              <label>
-                能力复盘
-                <textarea
-                  onChange={(event) => updateReviewDraft("ability", event.target.value)}
-                  placeholder="开场、需求挖掘、价值传递、异议处理、成交推动，各扣分在哪里？"
-                  rows="3"
-                  value={reviewDraft.ability}
-                />
-              </label>
-            </div>
-          </section>
-        </>
-      )}
-
-      {toolTab === "销售方法论" && (
-        <>
-          <section className="surface">
-            <SectionHeader title="SPIN 销售法" icon={Target} />
-            <div className="spin-grid">
-              {spinCards.map((item) => (
-                <article className="spin-card" key={item.title}>
-                  <strong>{item.title}</strong>
-                  <p>{item.body}</p>
-                  {item.examples.map((example) => (
-                    <span key={example}>{example}</span>
-                  ))}
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="surface">
-            <SectionHeader title="Sales Skill 能力库" icon={BookOpen} />
-            <div className="playbook-grid">
-              {skillCards.map((item) => (
-                <article className="playbook-card" key={item.title}>
-                  <strong>{item.title}</strong>
-                  <p>{item.body}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </>
-      )}
-    </section>
-  );
-}
-
 function FollowupsView({
   activityForm,
   customers,
   followupAi,
+  onAddCustomer,
   onAcceptAi,
   onChange,
   onSave,
@@ -2896,6 +2732,15 @@ function FollowupsView({
 }) {
   return (
     <section className="view">
+      {customers.length === 0 ? (
+        <section className="surface followup-empty-guide">
+          <EmptyState
+            action="先新增客户"
+            onAction={onAddCustomer}
+            text="跟进记录必须关联客户。建立客户后，就能记录电话、拜访、报价反馈和下一步计划。"
+          />
+        </section>
+      ) : (
       <div className="content-grid">
         <section className="surface">
           <div className="panel-heading">
@@ -3027,6 +2872,7 @@ function FollowupsView({
           <Timeline activities={sortedActivities} customers={customers} />
         </section>
       </div>
+      )}
     </section>
   );
 }
@@ -4235,8 +4081,18 @@ function Timeline({ activities, customers }) {
   );
 }
 
-function EmptyState({ text }) {
-  return <div className="empty-state">{text}</div>;
+function EmptyState({ action, onAction, text }) {
+  return (
+    <div className="empty-state">
+      <span>{text}</span>
+      {action && onAction && (
+        <button className="secondary-button" onClick={onAction} type="button">
+          {action}
+          <ArrowRight size={15} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 function viewTitle(view) {
@@ -4478,54 +4334,6 @@ function leadTaskTitle(customer, risk) {
   if (customer.stage === "方案报价") return `报价复盘：${customer.company}`;
   if (customer.stage === "谈判中") return `确认成交条件：${customer.company}`;
   return `推进线索下一步：${customer.company}`;
-}
-
-function buildSalesCallDiagnosis(text, scenario) {
-  const content = String(text || "").trim();
-  const checks = [
-    {
-      title: "开场切入",
-      hit: /今天|这次|目标|想先|确认一下|了解一下/.test(content),
-      good: "开场有明确沟通目标。",
-      bad: "开场目标不清，容易聊散。",
-    },
-    {
-      title: "需求挖掘",
-      hit: /痛点|问题|为什么|影响|现在怎么|最难|卡在哪里|需求/.test(content),
-      good: "有追问客户现状和问题。",
-      bad: "需求挖掘不足，建议多问现状、问题和影响。",
-    },
-    {
-      title: "预算/决策链",
-      hit: /预算|费用|价格|老板|采购|决策|审批|谁拍板|负责人/.test(content),
-      good: "有触达预算或关键人信息。",
-      bad: "缺少预算和决策链确认，这是销售推进的高风险点。",
-    },
-    {
-      title: "价值传递",
-      hit: /提升|减少|节省|效率|风险|案例|数据|ROI|回款|转化/.test(content),
-      good: "价值表达能落到效率、风险或结果。",
-      bad: "价值传递偏弱，避免只讲功能，要翻译成客户收益。",
-    },
-    {
-      title: "明确下一步",
-      hit: /下一步|下次|明天|周|时间|待办|发你|约|确认/.test(content),
-      good: "有下一步动作或时间点。",
-      bad: "缺少明确下一步，沟通结束后容易断档。",
-    },
-  ];
-  const hitCount = checks.filter((item) => item.hit).length;
-  const score = content ? Math.max(38, Math.round((hitCount / checks.length) * 100)) : 0;
-  const level = !content ? "等待录音文本" : score >= 80 ? "质量较好" : score >= 60 ? "需要补强" : "风险较高";
-
-  return {
-    score,
-    level: `${scenario} · ${level}`,
-    items: checks.map((item) => ({
-      ...item,
-      text: item.hit ? item.good : item.bad,
-    })),
-  };
 }
 
 function nextBestAction(customer, activities, tasks) {

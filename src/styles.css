@@ -427,9 +427,9 @@ button {
 
 .self-check {
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(242, 251, 246, 0.9)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(242, 248, 255, 0.9)),
     #ffffff;
-  border-color: rgba(22, 132, 95, 0.16);
+  border-color: rgba(0, 122, 255, 0.14);
 }
 
 .self-check-head {
@@ -502,53 +502,90 @@ button {
   transition: width 0.5s var(--ease);
 }
 
-.self-check-grid {
+.health-check-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.check-card {
-  align-items: flex-start;
+.health-check-card {
+  --health-accent: var(--blue);
+  --health-soft: rgba(0, 122, 255, 0.07);
+  align-items: center;
   background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(77, 131, 189, 0.13);
+  border: 1px solid rgba(16, 24, 40, 0.08);
   border-radius: 14px;
-  display: flex;
-  gap: 9px;
+  color: var(--ink);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 104px;
   min-width: 0;
   padding: 12px;
+  text-align: left;
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease), border-color 0.22s var(--ease);
 }
 
-.check-card svg {
-  color: var(--muted);
-  flex: 0 0 auto;
-  margin-top: 1px;
+.health-check-card:hover {
+  border-color: color-mix(in srgb, var(--health-accent) 30%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--health-accent) 10%, transparent);
+  transform: translateY(-1px);
 }
 
-.check-card.done {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(239, 250, 246, 0.88));
-  border-color: rgba(22, 132, 95, 0.24);
+.health-check-card.risk {
+  --health-accent: var(--rose);
+  --health-soft: rgba(255, 59, 48, 0.08);
 }
 
-.check-card.done svg {
-  color: var(--green);
+.health-check-card.watch {
+  --health-accent: var(--orange);
+  --health-soft: rgba(255, 159, 10, 0.1);
 }
 
-.check-card strong,
-.check-card span {
+.health-check-card.violet {
+  --health-accent: var(--violet);
+  --health-soft: rgba(175, 82, 222, 0.08);
+}
+
+.health-check-card.clear {
+  --health-accent: var(--green);
+  --health-soft: rgba(52, 199, 89, 0.08);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), var(--health-soft));
+}
+
+.health-check-card strong,
+.health-check-card span {
   display: block;
 }
 
-.check-card strong {
-  font-size: 13px;
+.health-check-card strong {
+  font-size: 14px;
   line-height: 1.35;
 }
 
-.check-card span {
+.health-check-card span {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
   margin-top: 4px;
+}
+
+.health-check-card em {
+  align-items: center;
+  background: var(--health-soft);
+  border-radius: 12px;
+  color: var(--health-accent);
+  display: flex;
+  font-size: 24px;
+  font-style: normal;
+  font-weight: 850;
+  height: 46px;
+  justify-content: center;
+  min-width: 46px;
+}
+
+.health-check-card > svg {
+  color: var(--health-accent);
 }
 
 .priority-action-list {
@@ -1488,25 +1525,6 @@ textarea {
   color: #1d4ed8;
 }
 
-.spin-title {
-  color: #2f3742;
-  font-size: 13px;
-}
-
-.spin-list {
-  display: grid;
-  gap: 8px;
-}
-
-.spin-list span {
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 12px;
-  color: #414851;
-  line-height: 1.5;
-  padding: 9px 10px;
-}
-
 .plan-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1744,8 +1762,7 @@ textarea {
   font-weight: 800;
 }
 
-.detail-tabs,
-.tool-tabs {
+.detail-tabs {
   margin-bottom: 14px;
   width: fit-content;
 }
@@ -1872,11 +1889,26 @@ textarea {
   border: 1px dashed rgba(0, 0, 0, 0.16);
   border-radius: 14px;
   color: #6e7378;
-  display: flex;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
   justify-content: center;
   min-height: 82px;
   padding: 16px;
   text-align: center;
+}
+
+.empty-state > span {
+  line-height: 1.6;
+  max-width: 520px;
+}
+
+.customer-card-grid > .empty-state {
+  grid-column: 1 / -1;
+}
+
+.followup-empty-guide .empty-state {
+  min-height: 260px;
 }
 
 .empty-action {
@@ -2036,6 +2068,61 @@ textarea {
   justify-content: flex-end;
 }
 
+.first-run-guide {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(239, 247, 255, 0.92)),
+    #ffffff;
+  border-color: rgba(0, 122, 255, 0.16);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.2fr) auto;
+}
+
+.first-run-guide h3 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.first-run-guide p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.first-run-steps {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.first-run-steps span {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 14px;
+  color: #475467;
+  display: flex;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px;
+}
+
+.first-run-steps strong {
+  align-items: center;
+  background: #eaf3ff;
+  border-radius: 9px;
+  color: var(--blue);
+  display: flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
 .report-hero {
   align-items: center;
   background:
@@ -2092,6 +2179,12 @@ textarea {
   min-height: 238px;
 }
 
+.sales-diary-card .panel-heading > .primary-button {
+  flex: 0 0 auto;
+  min-width: 88px;
+  white-space: nowrap;
+}
+
 .diary-textarea {
   background: rgba(255, 255, 255, 0.84);
   border-radius: 18px;
@@ -2102,7 +2195,7 @@ textarea {
 .dashboard-utility-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .utility-card {
@@ -2421,8 +2514,7 @@ textarea {
   padding: 10px 12px;
 }
 
-.source-grid,
-.playbook-grid {
+.source-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2431,7 +2523,6 @@ textarea {
 .source-card,
 .duplicate-card,
 .contract-card,
-.playbook-card,
 .template-box {
   background: rgba(255, 255, 255, 0.76);
   border: 1px solid rgba(15, 23, 42, 0.09);
@@ -2462,7 +2553,6 @@ textarea {
 .source-card span,
 .duplicate-card span,
 .contract-card small,
-.playbook-card p,
 .template-box p {
   color: #5d6369;
   font-size: 13px;
@@ -2517,8 +2607,7 @@ textarea {
 }
 
 .activation-row strong,
-.contract-card strong,
-.playbook-card strong {
+.contract-card strong {
   display: block;
   overflow-wrap: anywhere;
 }
@@ -2769,140 +2858,6 @@ textarea {
   gap: 8px;
 }
 
-.playbook-card {
-  display: grid;
-  gap: 8px;
-}
-
-.checklist span {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(15, 23, 42, 0.09);
-  border-radius: 12px;
-  display: flex;
-  gap: 8px;
-  min-height: 42px;
-  padding: 10px 12px;
-}
-
-.checklist svg {
-  color: var(--good);
-  flex: 0 0 auto;
-}
-
-.call-analyzer {
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(242, 247, 255, 0.88)),
-    #ffffff;
-}
-
-.call-analyzer-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
-}
-
-.call-input-panel {
-  display: grid;
-  gap: 14px;
-}
-
-.call-input-panel label {
-  color: #4c5258;
-  display: grid;
-  font-size: 13px;
-  font-weight: 700;
-  gap: 7px;
-}
-
-.diagnosis-panel {
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(15, 23, 42, 0.09);
-  border-radius: 16px;
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-}
-
-.diagnosis-score {
-  align-items: center;
-  background: linear-gradient(145deg, #111827, #203354);
-  border-radius: 16px;
-  color: #ffffff;
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  min-height: 112px;
-  padding: 14px;
-}
-
-.diagnosis-score span,
-.diagnosis-score small {
-  opacity: 0.82;
-}
-
-.diagnosis-score strong {
-  font-size: 38px;
-  line-height: 1;
-}
-
-.diagnosis-list,
-.spin-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.diagnosis-item {
-  background: #fff8e8;
-  border: 1px solid rgba(217, 145, 20, 0.24);
-  border-radius: 12px;
-  display: grid;
-  gap: 5px;
-  padding: 11px;
-}
-
-.diagnosis-item.hit {
-  background: #edf8f1;
-  border-color: rgba(22, 132, 95, 0.22);
-}
-
-.diagnosis-item span {
-  color: #5d6369;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.spin-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.spin-card {
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(15, 23, 42, 0.09);
-  border-radius: 14px;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 13px;
-}
-
-.spin-card p {
-  color: #5d6369;
-  font-size: 13px;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.spin-card span {
-  background: #f7f9fc;
-  border: 1px solid rgba(53, 92, 155, 0.1);
-  border-radius: 10px;
-  color: #4c5258;
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 8px;
-}
-
 .review-form {
   display: grid;
   gap: 12px;
@@ -2922,9 +2877,18 @@ textarea {
 }
 
 @media (max-width: 1180px) {
-  .self-check-grid,
+  .health-check-grid,
   .priority-action-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .first-run-guide {
+    grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.2fr);
+  }
+
+  .first-run-guide > .primary-button {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .metrics-grid,
@@ -3011,14 +2975,11 @@ textarea {
   .pipeline-strip,
   .pipeline-board,
     .customer-card-grid,
-    .self-check-grid,
+    .health-check-grid,
     .priority-action-list,
     .backup-panel,
     .mini-stats-grid,
     .source-grid,
-    .playbook-grid,
-    .call-analyzer-grid,
-    .spin-grid,
     .lead-workbench,
     .plan-layout,
     .editable-plan-grid,
@@ -3029,6 +2990,30 @@ textarea {
     .lead-grade-grid,
     .contract-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .first-run-guide {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .first-run-guide > .primary-button {
+    grid-column: auto;
+    justify-self: stretch;
+  }
+
+  .first-run-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .health-check-card {
+    min-height: 92px;
+  }
+
+  .metrics-grid,
+  .pipeline-strip,
+  .dashboard-utility-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .project-form-grid,
