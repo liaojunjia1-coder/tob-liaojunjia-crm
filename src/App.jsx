@@ -2372,36 +2372,43 @@ function CustomersView({
     <section className="view">
       <div className="customer-layout">
         <section className="surface customer-list-panel">
-          <div className="panel-heading">
-            <h3>客户小卡片</h3>
+          <div className="panel-heading customer-list-heading">
+            <div>
+              <span className="section-kicker">客户资产</span>
+              <h3>客户列表 <em>{customers.length}</em></h3>
+            </div>
+            <button className="icon-button customer-list-add" onClick={onAddCustomer} title="新增客户" type="button">
+              <Plus size={17} />
+            </button>
           </div>
-          <div className="filters">
+          <div className="filters customer-filter-grid">
             <label className="search-box">
               <Search size={16} />
               <input
+                aria-label="搜索客户"
                 onChange={(event) => setSearchText(event.target.value)}
-                placeholder="搜索公司、联系人、标签"
+                placeholder="搜索公司、联系人"
                 value={searchText}
               />
             </label>
-            <select onChange={(event) => setStageFilter(event.target.value)} value={stageFilter}>
-              <option>全部</option>
+            <select aria-label="按客户阶段筛选" onChange={(event) => setStageFilter(event.target.value)} value={stageFilter}>
+              <option value="全部">全部阶段</option>
               {STAGES.map((stage) => (
                 <option key={stage.id}>{stage.id}</option>
               ))}
             </select>
-            <select onChange={(event) => setPriorityFilter(event.target.value)} value={priorityFilter}>
+            <select aria-label="按客户评级筛选" onChange={(event) => setPriorityFilter(event.target.value)} value={priorityFilter}>
               <option>全部评级</option>
               {PRIORITIES.map((priority) => (
                 <option key={priority}>{priority}类</option>
               ))}
             </select>
-            <select onChange={(event) => setRiskFilter(event.target.value)} value={riskFilter}>
+            <select aria-label="按客户风险筛选" onChange={(event) => setRiskFilter(event.target.value)} value={riskFilter}>
               {["全部风险", "高风险", "需动作", "健康"].map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>
-            <select onChange={(event) => setCustomerSort(event.target.value)} value={customerSort}>
+            <select aria-label="客户排序" onChange={(event) => setCustomerSort(event.target.value)} value={customerSort}>
               {["风险优先", "评级优先", "金额高到低", "新建优先"].map((item) => (
                 <option key={item}>{item}</option>
               ))}
@@ -2410,6 +2417,13 @@ function CustomersView({
           <div className="customer-card-grid">
             {customers.map((item) => {
               const risk = customerRisk(item, data.activities, data.tasks);
+              const nextTask = data.tasks
+                .filter((task) => task.customerId === item.id && !task.done)
+                .sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")))[0];
+              const latestActivity = data.activities
+                .filter((activity) => activity.customerId === item.id)
+                .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+              const activityPreview = latestActivity?.content?.split("\n").find(Boolean);
               return (
                 <button
                   className={`mini-customer-card priority-card-${item.priority.toLowerCase()} stage-tone-${stageMeta(item.stage).tone} risk-${risk.level}${
@@ -2419,14 +2433,28 @@ function CustomersView({
                   onClick={() => onPickCustomer(item.id)}
                   type="button"
                 >
-                  <span className={`priority-dot priority-${item.priority.toLowerCase()}`} />
-                  <span className={`priority-label priority-label-${item.priority.toLowerCase()}`}>{item.priority}类</span>
-                  <strong>{item.company}</strong>
-                  <small>{item.contact || "未填联系人"} · {item.industry || "未填行业"}</small>
-                  <span className={`customer-risk-chip ${risk.level}`}>{risk.label}</span>
-                  <span className="mini-card-footer">
+                  <span className="customer-card-head">
+                    <span className={`customer-priority-mark priority-${item.priority.toLowerCase()}`}>{item.priority}</span>
+                    <span className="customer-card-identity">
+                      <strong>{item.company}</strong>
+                      <small>{item.contact || "未填联系人"} · {item.industry || "未填行业"}</small>
+                    </span>
+                    <span className={`customer-risk-chip ${risk.level}`}>{risk.label}</span>
+                  </span>
+                  <span className="customer-card-facts">
                     <StageBadge stage={item.stage} compact />
-                    <em>{money(item.amount)}</em>
+                    <span className="customer-card-value">
+                      <small>机会金额</small>
+                      <strong>{money(item.amount)}</strong>
+                    </span>
+                  </span>
+                  <span className={`customer-card-next${nextTask ? " has-task" : ""}`}>
+                    {nextTask ? <CalendarDays size={14} /> : <MessageSquare size={14} />}
+                    <span>
+                      {nextTask?.title || activityPreview || "尚未安排下一步"}
+                    </span>
+                    {nextTask?.dueDate && <time>{nextTask.dueDate.slice(5)}</time>}
+                    <ChevronRight size={14} />
                   </span>
                 </button>
               );
@@ -4009,93 +4037,149 @@ function AiInsight({ insight }) {
 function CustomerForm({ customerForm, editing, onChange, onClose, onSubmit }) {
   return (
     <div className="drawer-backdrop">
-      <section className="drawer">
-        <div className="panel-heading">
-          <h3>{editing ? "编辑客户" : "新增客户"}</h3>
+      <section className="drawer customer-drawer">
+        <header className="customer-drawer-header">
+          <span className="customer-drawer-icon"><UserPlus size={20} /></span>
+          <div>
+            <span className="section-kicker">客户档案 · 销售机会</span>
+            <h3>{editing ? "编辑客户" : "新增客户"}</h3>
+          </div>
           <button className="icon-button" onClick={onClose} title="关闭" type="button">
             <X size={18} />
           </button>
-        </div>
-        <form className="form-grid" onSubmit={onSubmit}>
-          <TextField label="公司名" required value={customerForm.company} onChange={(company) => onChange({ ...customerForm, company })} />
-          <TextField label="联系人" value={customerForm.contact} onChange={(contact) => onChange({ ...customerForm, contact })} />
-          <TextField label="电话/微信" value={customerForm.phone} onChange={(phone) => onChange({ ...customerForm, phone })} />
-          <TextField label="行业" value={customerForm.industry} onChange={(industry) => onChange({ ...customerForm, industry })} />
-          <label>
-            客户阶段
-            <select onChange={(event) => onChange({ ...customerForm, stage: event.target.value })} value={customerForm.stage}>
-              {STAGES.map((stage) => (
-                <option key={stage.id}>{stage.id}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            客户评级
-            <select onChange={(event) => onChange({ ...customerForm, priority: event.target.value })} value={customerForm.priority}>
-              {PRIORITIES.map((priority) => (
-                <option key={priority}>{priority}</option>
-              ))}
-            </select>
-          </label>
-          <TextField label="预计金额" value={customerForm.amount} onChange={(amount) => onChange({ ...customerForm, amount })} />
-          <TextField label="来源" value={customerForm.source} onChange={(source) => onChange({ ...customerForm, source })} />
-          <label>
-            建档日期
-            <input onChange={(event) => onChange({ ...customerForm, recordedAt: event.target.value })} type="date" value={customerForm.recordedAt} />
-          </label>
-          <TextField label="核心痛点" value={customerForm.painPoint} onChange={(painPoint) => onChange({ ...customerForm, painPoint })} />
-          <TextField label="决策链" value={customerForm.decisionMaker} onChange={(decisionMaker) => onChange({ ...customerForm, decisionMaker })} />
-          <TextField label="竞品/替代方案" value={customerForm.competitor} onChange={(competitor) => onChange({ ...customerForm, competitor })} />
-          <TextField label="标签" value={customerForm.tags} onChange={(tags) => onChange({ ...customerForm, tags })} />
-          <label className="wide">
-            备注
-            <textarea onChange={(event) => onChange({ ...customerForm, note: event.target.value })} rows="3" value={customerForm.note} />
-          </label>
-          <details className="form-section-details wide">
-            <summary>
-              <span>项目需求</span>
-              <small>产品意向、应用场景和技术条件</small>
-            </summary>
-            <div className="project-form-grid">
-              <label>
-                客户类型
-                <select onChange={(event) => onChange({ ...customerForm, customerType: event.target.value })} value={customerForm.customerType}>
-                  <option value="">请选择</option>
-                  {CUSTOMER_TYPES.map((type) => <option key={type}>{type}</option>)}
-                </select>
-              </label>
-              <label>
-                应用场景
-                <select onChange={(event) => onChange({ ...customerForm, applicationScenario: event.target.value })} value={customerForm.applicationScenario}>
-                  <option value="">请选择</option>
-                  {APPLICATION_SCENARIOS.map((scenario) => <option key={scenario}>{scenario}</option>)}
-                </select>
-              </label>
-              <div className="wide">
-                <TextField
-                  label="意向产品/方案"
-                  value={customerForm.productInterest}
-                  onChange={(productInterest) => onChange({ ...customerForm, productInterest })}
-                />
+        </header>
+        <form className="customer-form" onSubmit={onSubmit}>
+          <div className="customer-form-scroll">
+            <section className="customer-form-section">
+              <div className="customer-form-section-title">
+                <span><User size={17} /></span>
+                <div>
+                  <strong>基本信息</strong>
+                  <small>联系人与企业资料</small>
+                </div>
               </div>
-              <TextField label="工件/服务对象" value={customerForm.workpiece} onChange={(workpiece) => onChange({ ...customerForm, workpiece })} />
-              <TextField label="现有机器人/设备" value={customerForm.robotModel} onChange={(robotModel) => onChange({ ...customerForm, robotModel })} />
-              <TextField label="精度要求" value={customerForm.accuracyRequirement} onChange={(accuracyRequirement) => onChange({ ...customerForm, accuracyRequirement })} />
-              <TextField label="节拍要求" value={customerForm.cycleRequirement} onChange={(cycleRequirement) => onChange({ ...customerForm, cycleRequirement })} />
-              <TextField label="现场难点" value={customerForm.siteChallenges} onChange={(siteChallenges) => onChange({ ...customerForm, siteChallenges })} />
-              <TextField label="可提供测试材料" value={customerForm.testMaterials} onChange={(testMaterials) => onChange({ ...customerForm, testMaterials })} />
-              <TextField label="项目时间窗口" value={customerForm.projectTimeline} onChange={(projectTimeline) => onChange({ ...customerForm, projectTimeline })} />
-              <TextField label="技术联系人" value={customerForm.technicalContact} onChange={(technicalContact) => onChange({ ...customerForm, technicalContact })} />
-            </div>
-          </details>
-          <div className="form-actions">
+              <div className="customer-form-grid">
+                <TextField className="wide" label="公司名称" placeholder="请输入客户公司全称" required value={customerForm.company} onChange={(company) => onChange({ ...customerForm, company })} />
+                <TextField label="联系人" placeholder="姓名或称呼" value={customerForm.contact} onChange={(contact) => onChange({ ...customerForm, contact })} />
+                <TextField label="电话 / 微信" placeholder="手机号或微信号" value={customerForm.phone} onChange={(phone) => onChange({ ...customerForm, phone })} />
+                <TextField label="所属行业" placeholder="如 精密制造" value={customerForm.industry} onChange={(industry) => onChange({ ...customerForm, industry })} />
+                <TextField label="客户来源" placeholder="如 转介绍、展会" value={customerForm.source} onChange={(source) => onChange({ ...customerForm, source })} />
+              </div>
+            </section>
+
+            <section className="customer-form-section">
+              <div className="customer-form-section-title">
+                <span><Target size={17} /></span>
+                <div>
+                  <strong>商机判断</strong>
+                  <small>阶段、评级与机会金额</small>
+                </div>
+              </div>
+              <div className="customer-form-grid">
+                <label>
+                  客户阶段
+                  <select onChange={(event) => onChange({ ...customerForm, stage: event.target.value })} value={customerForm.stage}>
+                    {STAGES.map((stage) => (
+                      <option key={stage.id}>{stage.id}</option>
+                    ))}
+                  </select>
+                </label>
+                <TextField inputMode="numeric" label="机会金额" placeholder="如 480000" value={customerForm.amount} onChange={(amount) => onChange({ ...customerForm, amount })} />
+                <div className="customer-priority-field wide">
+                  <span>客户评级</span>
+                  <div className="customer-priority-picker" role="group" aria-label="客户评级">
+                    {[
+                      ["A", "重点"],
+                      ["B", "优先"],
+                      ["C", "培育"],
+                      ["D", "观察"],
+                    ].map(([priority, label]) => (
+                      <button
+                        aria-pressed={customerForm.priority === priority}
+                        className={`priority-choice priority-choice-${priority.toLowerCase()}${customerForm.priority === priority ? " active" : ""}`}
+                        key={priority}
+                        onClick={() => onChange({ ...customerForm, priority })}
+                        type="button"
+                      >
+                        <strong>{priority}</strong>
+                        <small>{label}</small>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label>
+                  首次记录日期
+                  <input onChange={(event) => onChange({ ...customerForm, recordedAt: event.target.value })} type="date" value={customerForm.recordedAt} />
+                </label>
+              </div>
+            </section>
+
+            <section className="customer-form-section">
+              <div className="customer-form-section-title">
+                <span><Brain size={17} /></span>
+                <div>
+                  <strong>销售判断</strong>
+                  <small>痛点、决策链与竞争情况</small>
+                </div>
+              </div>
+              <div className="customer-form-grid">
+                <label className="wide">
+                  核心痛点
+                  <textarea onChange={(event) => onChange({ ...customerForm, painPoint: event.target.value })} placeholder="客户最需要解决的问题" rows="3" value={customerForm.painPoint} />
+                </label>
+                <TextField label="决策链" placeholder="使用人、影响者、决策人" value={customerForm.decisionMaker} onChange={(decisionMaker) => onChange({ ...customerForm, decisionMaker })} />
+                <TextField label="竞品 / 替代方案" placeholder="已知竞品或现有方案" value={customerForm.competitor} onChange={(competitor) => onChange({ ...customerForm, competitor })} />
+                <TextField className="wide" label="客户标签" placeholder="多个标签可用逗号分隔" value={customerForm.tags} onChange={(tags) => onChange({ ...customerForm, tags })} />
+                <label className="wide">
+                  备注
+                  <textarea onChange={(event) => onChange({ ...customerForm, note: event.target.value })} placeholder="补充客户背景或沟通注意事项" rows="3" value={customerForm.note} />
+                </label>
+              </div>
+            </section>
+
+            <details className="form-section-details customer-project-details">
+              <summary>
+                <span>
+                  <strong>项目需求</strong>
+                  <small>产品意向、应用场景和技术条件</small>
+                </span>
+                <em>按需补充</em>
+              </summary>
+              <div className="project-form-grid">
+                <label>
+                  客户类型
+                  <select onChange={(event) => onChange({ ...customerForm, customerType: event.target.value })} value={customerForm.customerType}>
+                    <option value="">请选择</option>
+                    {CUSTOMER_TYPES.map((type) => <option key={type}>{type}</option>)}
+                  </select>
+                </label>
+                <label>
+                  应用场景
+                  <select onChange={(event) => onChange({ ...customerForm, applicationScenario: event.target.value })} value={customerForm.applicationScenario}>
+                    <option value="">请选择</option>
+                    {APPLICATION_SCENARIOS.map((scenario) => <option key={scenario}>{scenario}</option>)}
+                  </select>
+                </label>
+                <TextField className="wide" label="意向产品 / 方案" value={customerForm.productInterest} onChange={(productInterest) => onChange({ ...customerForm, productInterest })} />
+                <TextField label="工件 / 服务对象" value={customerForm.workpiece} onChange={(workpiece) => onChange({ ...customerForm, workpiece })} />
+                <TextField label="现有机器人 / 设备" value={customerForm.robotModel} onChange={(robotModel) => onChange({ ...customerForm, robotModel })} />
+                <TextField label="精度要求" value={customerForm.accuracyRequirement} onChange={(accuracyRequirement) => onChange({ ...customerForm, accuracyRequirement })} />
+                <TextField label="节拍要求" value={customerForm.cycleRequirement} onChange={(cycleRequirement) => onChange({ ...customerForm, cycleRequirement })} />
+                <TextField label="现场难点" value={customerForm.siteChallenges} onChange={(siteChallenges) => onChange({ ...customerForm, siteChallenges })} />
+                <TextField label="可提供测试材料" value={customerForm.testMaterials} onChange={(testMaterials) => onChange({ ...customerForm, testMaterials })} />
+                <TextField label="项目时间窗口" value={customerForm.projectTimeline} onChange={(projectTimeline) => onChange({ ...customerForm, projectTimeline })} />
+                <TextField label="技术联系人" value={customerForm.technicalContact} onChange={(technicalContact) => onChange({ ...customerForm, technicalContact })} />
+              </div>
+            </details>
+          </div>
+          <div className="customer-form-actions">
             <button className="secondary-button" onClick={onClose} type="button">
               <X size={18} />
               取消
             </button>
             <button className="primary-button" type="submit">
               <Save size={18} />
-              保存
+              {editing ? "保存修改" : "保存客户"}
             </button>
           </div>
         </form>
@@ -4162,11 +4246,18 @@ function ProjectRequirements({ customer, onEdit }) {
   );
 }
 
-function TextField({ label, onChange, required = false, value }) {
+function TextField({ className = "", inputMode, label, onChange, placeholder = "", required = false, type = "text", value }) {
   return (
-    <label>
+    <label className={className}>
       {label}
-      <input onChange={(event) => onChange(event.target.value)} required={required} value={value} />
+      <input
+        inputMode={inputMode}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        required={required}
+        type={type}
+        value={value}
+      />
     </label>
   );
 }
