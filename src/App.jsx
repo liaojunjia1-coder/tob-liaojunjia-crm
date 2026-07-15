@@ -52,6 +52,7 @@ const REMEMBER_KEY = "sales-crm-remember-v1";
 const REVIEW_DRAFT_KEY = "sales-crm-review-draft-v1";
 const FORM_DRAFT_PREFIX = "sales-crm-form-draft-v1";
 const DATA_VERSION = 3;
+const DEMO_SEED_VERSION = 1;
 const STATIC_LOCAL_MODE = import.meta.env.VITE_STATIC_LOCAL_MODE === "true";
 
 const STAGES = [
@@ -160,13 +161,8 @@ const defaultSettings = {
 
 const defaultData = {
   dataVersion: DATA_VERSION,
-  customers: [],
-  activities: [],
-  tasks: [],
-  contracts: [],
-  contractFiles: [],
-  salesDiary: "",
-  logs: [],
+  demoSeedVersion: DEMO_SEED_VERSION,
+  ...createDemoData(),
   settings: defaultSettings,
 };
 
@@ -174,6 +170,429 @@ function todayInputValue() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+}
+
+function dateInputOffset(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function isoDateOffset(days, hour = 9, minute = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
+function createDemoData() {
+  const customers = [
+    {
+      id: "demo-c-hengchuan",
+      company: "深圳衡川精密科技有限公司",
+      contact: "周总",
+      phone: "138****6021",
+      industry: "精密制造",
+      stage: "谈判中",
+      amount: "580000",
+      priority: "A",
+      source: "客户转介绍",
+      recordedAt: dateInputOffset(-24),
+      painPoint: "换型依赖人工校准，定位精度波动导致停线和返工。",
+      decisionMaker: "周总负责最终审批，设备经理与质量经理共同评估。",
+      competitor: "现有人工方案与两家本地集成商",
+      tags: "演示数据,重点项目,制造业",
+      note: "模拟客户数据，用于展示完整销售推进流程。",
+      customerType: "终端客户",
+      productInterest: "柔性定位与自动化升级方案",
+      applicationScenario: "生产制造",
+      workpiece: "精密金属结构件",
+      robotModel: "现有六轴机器人产线",
+      accuracyRequirement: "重复定位精度 ±0.05mm",
+      cycleRequirement: "单件节拍 18 秒以内",
+      siteChallenges: "多品种小批量，换型频繁",
+      testMaterials: "可提供三类典型工件",
+      projectTimeline: "本季度完成定案",
+      technicalContact: "罗工",
+      createdAt: isoDateOffset(-24, 10, 20),
+      dealPlan: {
+        nextStep: "确认付款节点并锁定合同版本",
+        method: "拜访",
+        dueDate: dateInputOffset(0),
+        priority: "高",
+        status: "进行中",
+        planType: "日计划",
+        updatedAt: isoDateOffset(-1, 17, 40),
+      },
+    },
+    {
+      id: "demo-c-tuowei",
+      company: "东莞拓远自动化设备有限公司",
+      contact: "李经理",
+      phone: "136****1846",
+      industry: "工业自动化",
+      stage: "方案报价",
+      amount: "460000",
+      priority: "A",
+      source: "行业展会",
+      recordedAt: dateInputOffset(-18),
+      painPoint: "现有检测工位依赖人工，误检率高且产能无法继续提升。",
+      decisionMaker: "生产副总决策，采购经理负责商务比价。",
+      competitor: "客户同时对比两套传统视觉方案",
+      tags: "演示数据,报价中,自动化",
+      note: "模拟客户数据，用于展示报价跟进和计划协同。",
+      customerType: "企业客户",
+      productInterest: "智能检测工位整体方案",
+      applicationScenario: "生产制造",
+      workpiece: "电子装配件",
+      robotModel: "SCARA 自动化线",
+      accuracyRequirement: "漏检率低于 0.3%",
+      cycleRequirement: "每分钟 45 件",
+      siteChallenges: "现场空间紧凑，需要不停线改造",
+      testMaterials: "已收到良品与缺陷样本",
+      projectTimeline: "两周内完成供应商评审",
+      technicalContact: "叶工",
+      createdAt: isoDateOffset(-18, 14, 10),
+      dealPlan: {
+        nextStep: "发送修订报价及 ROI 测算",
+        method: "邮件",
+        dueDate: dateInputOffset(1),
+        priority: "高",
+        status: "进行中",
+        planType: "日计划",
+        updatedAt: isoDateOffset(0, 11, 20),
+      },
+    },
+    {
+      id: "demo-c-lanxin",
+      company: "惠州澜芯新材料研究有限公司",
+      contact: "王博士",
+      phone: "139****7315",
+      industry: "新材料科研",
+      stage: "需求确认",
+      amount: "380000",
+      priority: "B",
+      source: "合作伙伴推荐",
+      recordedAt: dateInputOffset(-12),
+      painPoint: "实验样品批次多、参数变化快，需要稳定记录测试过程。",
+      decisionMaker: "实验室主任提出需求，院长审批预算。",
+      competitor: "继续人工测试或采购标准化单机",
+      tags: "演示数据,科研,需求确认",
+      note: "模拟客户数据，用于展示科研类项目需求。",
+      customerType: "科研院校",
+      productInterest: "实验自动化与数据采集方案",
+      applicationScenario: "科研教学",
+      workpiece: "复合材料实验样片",
+      robotModel: "暂无现有机器人",
+      accuracyRequirement: "过程参数可追溯",
+      cycleRequirement: "支持多批次连续测试",
+      siteChallenges: "实验方法尚在迭代",
+      testMaterials: "可提供标准样片与测试记录",
+      projectTimeline: "下月完成可行性验证",
+      technicalContact: "王博士",
+      createdAt: isoDateOffset(-12, 9, 45),
+      dealPlan: {
+        nextStep: "组织技术交流并确认测试样品",
+        method: "视频会议",
+        dueDate: dateInputOffset(3),
+        priority: "中",
+        status: "进行中",
+        planType: "周计划",
+        updatedAt: isoDateOffset(-2, 16, 10),
+      },
+    },
+    {
+      id: "demo-c-zhenwei",
+      company: "广州臻味商业设备有限公司",
+      contact: "陈总",
+      phone: "137****4098",
+      industry: "商业设备",
+      stage: "已成交",
+      amount: "520000",
+      priority: "B",
+      source: "老客户转介绍",
+      recordedAt: dateInputOffset(-42),
+      painPoint: "门店设备型号不统一，运维成本高且故障数据难以集中管理。",
+      decisionMaker: "陈总决策，运营负责人和财务负责人参与验收。",
+      competitor: "继续沿用原供应商分散运维",
+      tags: "演示数据,已成交,商业设备",
+      note: "模拟客户数据，用于展示合同与分期回款。",
+      customerType: "企业客户",
+      productInterest: "设备集中管理与运维升级项目",
+      applicationScenario: "商业服务",
+      workpiece: "连锁门店商业设备",
+      robotModel: "不涉及",
+      accuracyRequirement: "设备状态实时可查",
+      cycleRequirement: "首批 20 家门店上线",
+      siteChallenges: "门店分散，施工窗口短",
+      testMaterials: "已提供设备清单",
+      projectTimeline: "首期正在交付",
+      technicalContact: "赵经理",
+      createdAt: isoDateOffset(-42, 11, 0),
+    },
+    {
+      id: "demo-c-qicheng",
+      company: "佛山启程智能仓储有限公司",
+      contact: "何经理",
+      phone: "135****9274",
+      industry: "仓储物流",
+      stage: "已联系",
+      amount: "340000",
+      priority: "C",
+      source: "线上咨询",
+      recordedAt: dateInputOffset(-7),
+      painPoint: "高峰期人工盘点慢，库存差异影响发货准确率。",
+      decisionMaker: "仓储经理主导需求，信息化负责人评估接口。",
+      competitor: "现有 WMS 功能扩展",
+      tags: "演示数据,待确认,仓储",
+      note: "模拟客户数据，用于展示初步接触阶段。",
+      customerType: "终端客户",
+      productInterest: "仓储盘点与数据协同方案",
+      applicationScenario: "仓储物流",
+      workpiece: "标准托盘与周转箱",
+      robotModel: "已有搬运设备",
+      accuracyRequirement: "库存准确率达到 99.5%",
+      cycleRequirement: "夜间 6 小时完成盘点",
+      siteChallenges: "需要对接现有 WMS",
+      testMaterials: "可提供库位与接口清单",
+      projectTimeline: "等待内部立项",
+      technicalContact: "郑工",
+      createdAt: isoDateOffset(-7, 15, 30),
+    },
+    {
+      id: "demo-c-qinghe",
+      company: "中山青禾科技培训有限公司",
+      contact: "林老师",
+      phone: "133****5182",
+      industry: "科技教育",
+      stage: "新线索",
+      amount: "300000",
+      priority: "D",
+      source: "活动名片",
+      recordedAt: dateInputOffset(-2),
+      painPoint: "课程体验依赖讲师现场演示，希望增加可重复的实践项目。",
+      decisionMaker: "校区负责人初步了解，投资人尚未参与。",
+      competitor: "采购标准化教学套件",
+      tags: "演示数据,待资格判断,教育",
+      note: "模拟客户数据，用于展示新线索和 D 类客户管理。",
+      customerType: "企业客户",
+      productInterest: "实践教学与青少年科技课程方案",
+      applicationScenario: "科研教学",
+      workpiece: "课程项目与实验套件",
+      robotModel: "暂无",
+      accuracyRequirement: "适合重复教学使用",
+      cycleRequirement: "单课时 90 分钟",
+      siteChallenges: "预算与招生规模待确认",
+      testMaterials: "可提供课程大纲",
+      projectTimeline: "下学期前评估",
+      technicalContact: "林老师",
+      createdAt: isoDateOffset(-2, 10, 50),
+    },
+  ];
+
+  const activities = [
+    {
+      id: "demo-a-hengchuan-business",
+      customerId: "demo-c-hengchuan",
+      method: "拜访",
+      date: dateInputOffset(-1),
+      content: "客户认可技术方案，商务重点转为付款比例、验收口径和交付周期。周总希望本周锁定合同版本。",
+      nextStep: "确认付款节点并锁定合同版本。",
+      createdAt: isoDateOffset(-1, 17, 40),
+    },
+    {
+      id: "demo-a-hengchuan-test",
+      customerId: "demo-c-hengchuan",
+      method: "视频会议",
+      date: dateInputOffset(-4),
+      content: "复盘样件测试结果，定位精度满足要求；客户要求补充连续运行稳定性说明。",
+      nextStep: "补充稳定性测试结论和验收标准。",
+      createdAt: isoDateOffset(-4, 15, 20),
+    },
+    {
+      id: "demo-a-tuowei-quote",
+      customerId: "demo-c-tuowei",
+      method: "电话",
+      date: dateInputOffset(0),
+      content: "李经理反馈总体方案可行，但需要把停线改造时间和三年回报测算写入报价附件。",
+      nextStep: "发送修订报价及 ROI 测算。",
+      createdAt: isoDateOffset(0, 11, 20),
+    },
+    {
+      id: "demo-a-lanxin-discovery",
+      customerId: "demo-c-lanxin",
+      method: "视频会议",
+      date: dateInputOffset(-2),
+      content: "完成第一轮需求会，确认需要兼容三类样片；实验方法仍在调整，先做小范围验证。",
+      nextStep: "组织技术交流并确认测试样品。",
+      createdAt: isoDateOffset(-2, 16, 10),
+    },
+    {
+      id: "demo-a-zhenwei-contract",
+      customerId: "demo-c-zhenwei",
+      method: "微信",
+      date: dateInputOffset(-5),
+      content: "合同已签署并收到首期款 20 万，客户正在确认首批门店施工窗口。",
+      nextStep: "核对第二期回款资料与首批上线清单。",
+      createdAt: isoDateOffset(-5, 14, 35),
+    },
+    {
+      id: "demo-a-qicheng-first",
+      customerId: "demo-c-qicheng",
+      method: "电话",
+      date: dateInputOffset(-1),
+      content: "完成初次沟通，客户最关注盘点准确率和现有 WMS 接口，预算尚未明确。",
+      nextStep: "补齐仓库面积、库位数量与系统接口清单。",
+      createdAt: isoDateOffset(-1, 10, 15),
+    },
+  ];
+
+  const tasks = [
+    {
+      id: "demo-t-hengchuan-contract",
+      customerId: "demo-c-hengchuan",
+      title: "确认付款节点并锁定合同版本",
+      dueDate: dateInputOffset(0),
+      priority: "高",
+      planType: "日计划",
+      status: "进行中",
+      done: false,
+      createdAt: isoDateOffset(-1, 17, 45),
+    },
+    {
+      id: "demo-t-tuowei-roi",
+      customerId: "demo-c-tuowei",
+      title: "发送修订报价及 ROI 测算",
+      dueDate: dateInputOffset(1),
+      priority: "高",
+      planType: "日计划",
+      status: "进行中",
+      done: false,
+      createdAt: isoDateOffset(0, 11, 25),
+    },
+    {
+      id: "demo-t-lanxin-sample",
+      customerId: "demo-c-lanxin",
+      title: "组织技术交流并确认测试样品",
+      dueDate: dateInputOffset(3),
+      priority: "中",
+      planType: "周计划",
+      status: "进行中",
+      done: false,
+      createdAt: isoDateOffset(-2, 16, 15),
+    },
+    {
+      id: "demo-t-zhenwei-payment",
+      customerId: "demo-c-zhenwei",
+      title: "核对第二期回款资料与上线清单",
+      dueDate: dateInputOffset(8),
+      priority: "中",
+      planType: "月计划",
+      status: "未开始",
+      done: false,
+      createdAt: isoDateOffset(-5, 14, 40),
+    },
+    {
+      id: "demo-t-qicheng-interface",
+      customerId: "demo-c-qicheng",
+      title: "补齐仓库面积与系统接口清单",
+      dueDate: dateInputOffset(1),
+      priority: "中",
+      planType: "日计划",
+      status: "进行中",
+      done: false,
+      createdAt: isoDateOffset(-1, 10, 20),
+    },
+    {
+      id: "demo-t-qinghe-qualify",
+      customerId: "demo-c-qinghe",
+      title: "完成首次资格判断，确认预算与决策人",
+      dueDate: dateInputOffset(0),
+      priority: "低",
+      planType: "日计划",
+      status: "进行中",
+      done: false,
+      createdAt: isoDateOffset(-1, 18, 10),
+    },
+    {
+      id: "demo-t-tuowei-review-done",
+      customerId: "demo-c-tuowei",
+      title: "完成报价范围内部评审",
+      dueDate: dateInputOffset(-1),
+      priority: "高",
+      planType: "日计划",
+      status: "已完成",
+      done: true,
+      completedAt: isoDateOffset(-1, 16, 30),
+      createdAt: isoDateOffset(-3, 9, 20),
+    },
+  ];
+
+  const contracts = [
+    {
+      id: "demo-ct-zhenwei",
+      customerId: "demo-c-zhenwei",
+      title: "商业设备数字化升级项目",
+      contractNo: "TOB-DEMO-2026-001",
+      amount: "520000",
+      paidAmount: "200000",
+      status: "部分回款",
+      signDate: dateInputOffset(-7),
+      paymentDue: dateInputOffset(8),
+      note: "模拟合同：首期款已到账，第二期款随首批门店验收支付。",
+      createdAt: isoDateOffset(-7, 13, 20),
+    },
+  ];
+
+  const contractFiles = [
+    {
+      id: "demo-file-zhenwei-summary",
+      customerId: "demo-c-zhenwei",
+      name: "商业设备升级项目-合同摘要（演示）.txt",
+      type: "text/plain",
+      size: 486,
+      dataUrl: `data:text/plain;charset=utf-8,${encodeURIComponent("演示文件：商业设备数字化升级项目合同摘要。\n合同金额：520000 元。\n已回款：200000 元。\n本文件仅用于 CRM 功能展示。")}`,
+      note: "模拟合同文件",
+      createdAt: isoDateOffset(-7, 13, 25),
+    },
+  ];
+
+  const logs = [
+    { id: "demo-log-followup", type: "跟进", text: "记录跟进：东莞拓远自动化设备有限公司", createdAt: isoDateOffset(0, 11, 20) },
+    { id: "demo-log-plan", type: "计划", text: "更新日计划：确认付款节点并锁定合同版本", createdAt: isoDateOffset(-1, 17, 45) },
+    { id: "demo-log-contract", type: "合同", text: "更新回款：广州臻味商业设备有限公司", createdAt: isoDateOffset(-5, 14, 35) },
+    { id: "demo-log-customer", type: "客户", text: "更新客户阶段：深圳衡川精密科技有限公司", createdAt: isoDateOffset(-6, 16, 10) },
+  ];
+
+  return {
+    customers,
+    activities,
+    tasks,
+    contracts,
+    contractFiles,
+    salesDiary: "今日判断：衡川精密已进入合同条件确认，优先锁定付款与验收口径；拓远自动化需用 ROI 测算推动报价评审；青禾培训仍需先确认预算和真正决策人。",
+    logs,
+  };
+}
+
+function mergeDemoItems(existing = [], demo = [], keyForItem = (item) => item.id) {
+  const keys = new Set(existing.map(keyForItem).filter(Boolean));
+  return [...existing, ...demo.filter((item) => !keys.has(keyForItem(item)))];
+}
+
+function mergeDemoData(source, demo) {
+  return {
+    ...source,
+    demoSeedVersion: DEMO_SEED_VERSION,
+    customers: mergeDemoItems(source.customers, demo.customers, (customer) => customer.company || customer.id),
+    activities: mergeDemoItems(source.activities, demo.activities),
+    tasks: mergeDemoItems(source.tasks, demo.tasks),
+    contracts: mergeDemoItems(source.contracts, demo.contracts),
+    contractFiles: mergeDemoItems(source.contractFiles, demo.contractFiles),
+    salesDiary: source.salesDiary || demo.salesDiary,
+    logs: dedupeLogs([...(source.logs || []), ...demo.logs]),
+  };
 }
 
 function makeId(prefix) {
@@ -332,11 +751,15 @@ function stageMeta(stage) {
 
 function normalizeData(raw) {
   const incoming = raw && typeof raw === "object" ? raw : defaultData;
-  const source = Number(incoming.dataVersion || 0) < DATA_VERSION
+  const migrated = Number(incoming.dataVersion || 0) < DATA_VERSION
     ? { ...defaultData, settings: { ...defaultSettings, ...(incoming.settings || {}) } }
     : incoming;
+  const source = Number(migrated.demoSeedVersion || 0) < DEMO_SEED_VERSION
+    ? mergeDemoData(migrated, createDemoData())
+    : migrated;
   return {
     dataVersion: DATA_VERSION,
+    demoSeedVersion: DEMO_SEED_VERSION,
     customers: (source.customers || []).map((customer) => ({
       ...emptyCustomer,
       ...customer,
@@ -1930,7 +2353,9 @@ function DashboardView({
   onSaveSalesDiary,
 }) {
   const todayLabel = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
-  const focusTasks = [...metrics.openTasks]
+  const today = todayInputValue();
+  const focusTasks = metrics.openTasks
+    .filter((task) => task.planType === "日计划" && (!task.dueDate || task.dueDate <= today))
     .sort(
       (a, b) =>
         priorityRank(a.priority) - priorityRank(b.priority) ||
