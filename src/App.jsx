@@ -1984,6 +1984,13 @@ function App() {
     });
   }
 
+  const sidebarToday = todayInputValue();
+  const sidebarTodayLabel = `${Number(sidebarToday.slice(5, 7))}月${Number(sidebarToday.slice(8, 10))}日`;
+  const sidebarDueTasks = metrics.dayPlans.filter((task) => !task.dueDate || task.dueDate <= sidebarToday).length;
+  const sidebarFocusCustomers = data.customers.filter(
+    (customer) => customer.priority === "A" && customer.stage !== "已成交",
+  ).length;
+
   if (!authReady) return <LoadingScreen />;
 
   if (!user) {
@@ -2033,17 +2040,49 @@ function App() {
             </div>
           ))}
         </nav>
-        <div className="sidebar-status">
-          <div>
-            <span>{CLOUD_MODE ? "本地优先" : "本机保存"}</span>
-            <strong>{syncStatus}</strong>
+        <section className="sidebar-brief" aria-label="今日概览">
+          <div className="sidebar-brief-head">
+            <strong>今日概览</strong>
+            <span>{sidebarTodayLabel}</span>
           </div>
-          <div className="sidebar-sync-track"><span /></div>
-          <div>
-            <span>客户资产</span>
-            <strong>{data.customers.length} 位</strong>
+          <div className="sidebar-brief-actions">
+            <button
+              className="sidebar-brief-action task"
+              onClick={() => {
+                setTodoFilter("日计划");
+                go("tasks");
+              }}
+              type="button"
+            >
+              <span className="sidebar-brief-icon"><CalendarDays size={14} /></span>
+              <span>今日待办</span>
+              <strong>{sidebarDueTasks} 个</strong>
+              <ChevronRight size={13} />
+            </button>
+            <button className="sidebar-brief-action customer" onClick={() => go("customers")} type="button">
+              <span className="sidebar-brief-icon"><Users size={14} /></span>
+              <span>重点客户</span>
+              <strong>{sidebarFocusCustomers} 位</strong>
+              <ChevronRight size={13} />
+            </button>
+            <button className="sidebar-brief-action payment" onClick={() => go("contracts")} type="button">
+              <span className="sidebar-brief-icon"><HandCoins size={14} /></span>
+              <span>待回款</span>
+              <strong>{money(metrics.receivable)}</strong>
+              <ChevronRight size={13} />
+            </button>
           </div>
-        </div>
+          <div className="sidebar-brief-meta">
+            <span className="sidebar-save-state" title={syncStatus}>
+              <ShieldCheck size={13} />
+              <span>{CLOUD_MODE ? "本地优先" : syncStatus}</span>
+            </span>
+            <button onClick={() => go("customers")} type="button">
+              {data.customers.length} 位客户
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        </section>
       </aside>
 
       <main className="main">
