@@ -1145,6 +1145,21 @@ function App() {
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
   }
 
+  function openCustomerList({
+    customerId = "",
+    priority = "全部评级",
+    risk = "全部风险",
+    search = searchText,
+    stage = "全部",
+  } = {}) {
+    setPriorityFilter(priority);
+    setRiskFilter(risk);
+    setSearchText(search);
+    setStageFilter(stage);
+    if (customerId) setSelectedCustomerId(customerId);
+    go("customers");
+  }
+
   async function submitAuth(event) {
     event.preventDefault();
     setAuthError("");
@@ -1398,11 +1413,6 @@ function App() {
     setInstallPrompt(null);
   }
 
-  const selectedCustomer = useMemo(
-    () => data.customers.find((customer) => customer.id === selectedCustomerId) || data.customers[0],
-    [data.customers, selectedCustomerId],
-  );
-
   const sortedActivities = useMemo(
     () => [...data.activities].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [data.activities],
@@ -1440,12 +1450,19 @@ function App() {
       });
   }, [data.customers, data.activities, data.tasks, searchText, stageFilter, priorityFilter, riskFilter, customerSort]);
 
+  const selectedCustomer = useMemo(
+    () => filteredCustomers.find((customer) => customer.id === selectedCustomerId) || filteredCustomers[0] || null,
+    [filteredCustomers, selectedCustomerId],
+  );
+
   const visibleTasks = useMemo(() => {
+    const today = todayInputValue();
     return data.tasks
       .filter((task) => {
         if (todoFilter === "日计划") return !task.done && task.planType === "日计划";
         if (todoFilter === "周计划") return !task.done && task.planType === "周计划";
         if (todoFilter === "月计划") return !task.done && task.planType === "月计划";
+        if (todoFilter === "逾期") return !task.done && task.dueDate && task.dueDate < today;
         if (todoFilter === "已完成") return task.done;
         return true;
       })
@@ -1566,6 +1583,7 @@ function App() {
       activities: data.activities.filter((activity) => activity.customerId !== id),
       tasks: data.tasks.filter((task) => task.customerId !== id),
       contracts: data.contracts.filter((contract) => contract.customerId !== id),
+      contractFiles: data.contractFiles.filter((file) => file.customerId !== id),
     });
     setSelectedCustomerId(remainingCustomers[0]?.id || "");
     setAiInsight(null);
@@ -1627,21 +1645,32 @@ function App() {
     event.preventDefault();
     if (!activityForm.customerId || !activityForm.content.trim()) return;
     const { makeTask, taskDueDate, taskPriority, ...activityFields } = activityForm;
+    const nextStep = activityForm.nextStep.trim();
+    const nextTaskDate = taskDueDate || todayInputValue();
+    const matchingTask = nextStep
+      ? data.tasks.find(
+        (task) =>
+          !task.done &&
+          task.customerId === activityForm.customerId &&
+          String(task.title || "").trim() === nextStep &&
+          task.dueDate === nextTaskDate,
+      )
+      : null;
     const nextActivity = {
       id: makeId("a"),
       ...activityFields,
       content: activityForm.content.trim(),
-      nextStep: activityForm.nextStep.trim(),
+      nextStep,
       createdAt: new Date().toISOString(),
     };
     const nextTasks =
-      makeTask && activityForm.nextStep.trim()
+      makeTask && nextStep && !matchingTask
         ? [
           {
             id: makeId("t"),
             customerId: activityForm.customerId,
-            title: activityForm.nextStep.trim(),
-            dueDate: taskDueDate || todayInputValue(),
+            title: nextStep,
+            dueDate: nextTaskDate,
             priority: taskPriority || "中",
             planType: "日计划",
             status: "进行中",
@@ -1666,6 +1695,7 @@ function App() {
       taskPriority: data.settings.defaultTaskPriority || "中",
     });
     setFollowupAi(null);
+    if (matchingTask) setSyncStatus("跟进已保存，已有相同计划未重复创建");
     go("customers");
   }
 
@@ -1782,6 +1812,16 @@ function App() {
     const customer = data.customers.find((item) => item.id === customerId);
     if (!customer || !draft.nextStep.trim()) return false;
     const nextData = withLog(data, "计划", `保存推进计划：${customer.company}`);
+    const linkedTask =
+      data.tasks.find((task) => task.id === customer.dealPlan?.taskId) ||
+      data.tasks.find(
+        (task) =>
+          !task.done &&
+          task.customerId === customerId &&
+          String(task.title || "").trim() === String(customer.dealPlan?.nextStep || "").trim(),
+      );
+    const shouldJoinPlan = draft.planType !== "不加入计划";
+    const taskId = shouldJoinPlan ? linkedTask?.id || makeId("t") : "";
     const savedPlan = {
       nextStep: draft.nextStep.trim(),
       method: draft.method,
@@ -1789,32 +1829,40 @@ function App() {
       priority: draft.priority || "中",
       status: draft.status || "进行中",
       planType: draft.planType || "不加入计划",
+      taskId,
       updatedAt: new Date().toISOString(),
     };
-    const nextTasks =
-      draft.planType === "不加入计划"
-        ? data.tasks
-        : [
-            {
-              id: makeId("t"),
-              customerId,
-              title: draft.nextStep.trim(),
-              dueDate: draft.dueDate || todayInputValue(),
-              priority: draft.priority || "中",
-              planType: draft.planType,
-              status: draft.status || "进行中",
-              done: draft.status === "已完成",
-              completedAt: draft.status === "已完成" ? new Date().toISOString() : "",
-              createdAt: new Date().toISOString(),
-            },
-            ...data.tasks,
-          ];
+    let nextTasks = data.tasks;
+    if (shouldJoinPlan) {
+      const nextTask = {
+        ...(linkedTask || {}),
+        id: taskId,
+        customerId,
+        title: draft.nextStep.trim(),
+        dueDate: draft.dueDate || todayInputValue(),
+        priority: draft.priority || "中",
+        planType: draft.planType,
+        status: draft.status || "进行中",
+        done: draft.status === "已完成",
+        completedAt: draft.status === "已完成" ? new Date().toISOString() : "",
+        createdAt: linkedTask?.createdAt || new Date().toISOString(),
+      };
+      nextTasks = linkedTask
+        ? data.tasks.map((task) => (task.id === linkedTask.id ? nextTask : task))
+        : [nextTask, ...data.tasks];
+    }
     commit({
       ...nextData,
       customers: data.customers.map((item) => (item.id === customerId ? { ...item, dealPlan: savedPlan } : item)),
       tasks: nextTasks,
     });
-    setSyncStatus(draft.planType === "不加入计划" ? "推进计划已保存" : `已加入${draft.planType}`);
+    setSyncStatus(
+      draft.planType === "不加入计划"
+        ? "推进计划已保存"
+        : linkedTask
+          ? `已更新${draft.planType}`
+          : `已加入${draft.planType}`,
+    );
     return true;
   }
 
@@ -1822,10 +1870,18 @@ function App() {
     const customer = data.customers.find((item) => item.id === customerId);
     if (!customer) return;
     const risk = customerRisk(customer, data.activities, data.tasks);
+    const title = leadTaskTitle(customer, risk);
+    const existingTask = data.tasks.find(
+      (task) => !task.done && task.customerId === customerId && String(task.title || "").trim() === title,
+    );
+    if (existingTask) {
+      setSyncStatus("该客户已有相同的未完成计划");
+      return;
+    }
     const nextTask = {
       id: makeId("t"),
       customerId,
-      title: leadTaskTitle(customer, risk),
+      title,
       dueDate: todayInputValue(),
       priority: risk.level === "risk" || customer.priority === "A" ? "高" : "中",
       planType: "日计划",
@@ -2059,7 +2115,11 @@ function App() {
               <strong>{sidebarDueTasks} 个</strong>
               <ChevronRight size={13} />
             </button>
-            <button className="sidebar-brief-action customer" onClick={() => go("customers")} type="button">
+            <button
+              className="sidebar-brief-action customer"
+              onClick={() => openCustomerList({ priority: "A类", search: "" })}
+              type="button"
+            >
               <span className="sidebar-brief-icon"><Users size={14} /></span>
               <span>重点客户</span>
               <strong>{sidebarFocusCustomers} 位</strong>
@@ -2077,7 +2137,7 @@ function App() {
               <ShieldCheck size={13} />
               <span>{CLOUD_MODE ? "本地优先" : syncStatus}</span>
             </span>
-            <button onClick={() => go("customers")} type="button">
+            <button onClick={() => openCustomerList({ search: "" })} type="button">
               {data.customers.length} 位客户
               <ChevronRight size={12} />
             </button>
@@ -2096,7 +2156,7 @@ function App() {
               <Search size={16} />
               <input
                 onChange={(event) => setSearchText(event.target.value)}
-                onFocus={() => activeView !== "customers" && go("customers")}
+                onFocus={() => activeView !== "customers" && openCustomerList({ search: searchText })}
                 placeholder="搜索客户、联系人或记录"
                 value={searchText}
               />
@@ -2131,14 +2191,15 @@ function App() {
             metrics={metrics}
             onAddCustomer={openNewCustomerForm}
             onGeneratePlan={generateDailyPlan}
-            onPickCustomer={(id) => {
-              setSelectedCustomerId(id);
-              go("customers");
-            }}
+            onPickCustomer={(id) => openCustomerList({ customerId: id, search: "" })}
             onToggleTask={toggleTask}
             onViewContracts={() => go("contracts")}
-            onViewCustomers={() => go("customers")}
+            onViewCustomers={() => openCustomerList({ search: "" })}
             onViewFollowups={() => go("followups")}
+            onViewOverdueTasks={() => {
+              setTodoFilter("逾期");
+              go("tasks");
+            }}
             onViewPipeline={() => go("pipeline")}
             onViewReview={() => go("review")}
             onViewTasks={() => go("tasks")}
@@ -2151,10 +2212,7 @@ function App() {
             activities={data.activities}
             customers={data.customers}
             onStageChange={(id, stage) => updateCustomerField(id, "stage", stage)}
-            onPickCustomer={(id) => {
-              setSelectedCustomerId(id);
-              go("customers");
-            }}
+            onPickCustomer={(id) => openCustomerList({ customerId: id, search: "" })}
             tasks={data.tasks}
           />
         )}
@@ -2197,10 +2255,7 @@ function App() {
             customers={data.customers}
             onAddCustomer={openNewCustomerForm}
             onCreateTask={createLeadFollowTask}
-            onPickCustomer={(id) => {
-              setSelectedCustomerId(id);
-              go("customers");
-            }}
+            onPickCustomer={(id) => openCustomerList({ customerId: id, search: "" })}
             onStageChange={(id, stage) => updateCustomerField(id, "stage", stage)}
             tasks={data.tasks}
           />
@@ -2229,10 +2284,7 @@ function App() {
             onChange={setTaskForm}
             onDelay={delayTask}
             onDelete={deleteTask}
-            onPickCustomer={(id) => {
-              setSelectedCustomerId(id);
-              go("customers");
-            }}
+            onPickCustomer={(id) => openCustomerList({ customerId: id, search: "" })}
             onPlanFollowup={startPlannedFollowup}
             onSave={saveTask}
             onToggle={toggleTask}
@@ -2252,10 +2304,7 @@ function App() {
             onCopy={copyReport}
             onCreateTask={createLeadFollowTask}
             onGeneratePlan={generateDailyPlan}
-            onPickCustomer={(id) => {
-              setSelectedCustomerId(id);
-              go("customers");
-            }}
+            onPickCustomer={(id) => openCustomerList({ customerId: id, search: "" })}
             onPlanFollowup={startPlannedFollowup}
             onToggleTask={toggleTask}
             onViewTasks={() => go("tasks")}
@@ -2386,6 +2435,7 @@ function DashboardView({
   onViewContracts,
   onViewCustomers,
   onViewFollowups,
+  onViewOverdueTasks,
   onViewPipeline,
   onViewReview,
   onViewTasks,
@@ -2479,7 +2529,7 @@ function DashboardView({
             <div className="v2-health-head"><div><strong>客户池健康度</strong><span>{data.customers.filter((item) => !["已成交", "暂缓"].includes(item.stage)).length} 位活跃客户</span></div><b>{healthScore}<small>/100</small></b></div>
             <div className="v2-health-track"><span style={{ width: `${healthScore}%` }} /></div>
             <div className="v2-signal-list">
-              <button onClick={onViewTasks} type="button"><i className="risk" /><span>超期销售动作</span><em>{metrics.overdueTasks.length} 个</em><ChevronRight size={14} /></button>
+              <button onClick={onViewOverdueTasks} type="button"><i className="risk" /><span>超期销售动作</span><em>{metrics.overdueTasks.length} 个</em><ChevronRight size={14} /></button>
               <button onClick={() => (aWithoutPlan[0] ? onPickCustomer(aWithoutPlan[0].id) : onViewCustomers())} type="button"><i className="watch" /><span>A 类客户缺计划</span><em>{aWithoutPlan.length} 位</em><ChevronRight size={14} /></button>
               <button onClick={() => (topRisk ? onPickCustomer(topRisk.customer.id) : onViewCustomers())} type="button"><i className="good" /><span>需要关注客户</span><em>{riskItems.length} 位</em><ChevronRight size={14} /></button>
             </div>
@@ -2969,7 +3019,9 @@ function CustomersView({
 
 function LeadCenterView({ activities, customers, onAddCustomer, onCreateTask, onPickCustomer, onStageChange, tasks }) {
   const [activeSource, setActiveSource] = useState("全部来源");
-  const [activeStatus, setActiveStatus] = useState("A类");
+  const [activeStatus, setActiveStatus] = useState(
+    () => `${PRIORITIES.find((priority) => customers.some((customer) => customer.priority === priority)) || "A"}类`,
+  );
   const [selectedLeadId, setSelectedLeadId] = useState(customers[0]?.id || "");
   const sourceStats = sourceSummary(customers);
   const priorityStats = PRIORITIES.map((priority) => ({
@@ -2996,9 +3048,8 @@ function LeadCenterView({ activities, customers, onAddCustomer, onCreateTask, on
     return sourceOk && statusOk;
   });
   const selectedLead =
-    leadItems.find(({ customer }) => customer.id === selectedLeadId) ||
-    filteredLeadItems[0] ||
-    leadItems[0];
+    filteredLeadItems.find(({ customer }) => customer.id === selectedLeadId) ||
+    filteredLeadItems[0];
   const selectedCustomer = selectedLead?.customer;
   const selectedRisk = selectedLead?.risk;
   const selectedScore = selectedLead?.score || 0;
@@ -3525,10 +3576,13 @@ function TasksView({
   todoFilter,
   visibleTasks,
 }) {
+  const today = todayInputValue();
+  const dueDayPlans = metrics.dayPlans.filter((task) => !task.dueDate || task.dueDate <= today);
+
   return (
     <section className="view">
       <div className="metrics-grid">
-        <Metric title="日计划" value={metrics.dayPlans.length} detail="今天执行" />
+        <Metric title="日计划" value={metrics.dayPlans.length} detail={`${dueDayPlans.length} 个今日需处理`} />
         <Metric title="周计划" value={metrics.weekPlans.length} detail="本周推进" />
         <Metric title="月计划" value={metrics.monthPlans.length} detail="客户经营" />
         <Metric title="已完成" value={metrics.doneTasks.length} detail="动作闭环" />
@@ -3593,7 +3647,7 @@ function TasksView({
               </select>
             </label>
             <label>
-              计划日期
+              {planDateLabel(taskForm.planType)}
               <input
                 onChange={(event) => onChange({ ...taskForm, dueDate: event.target.value })}
                 type="date"
@@ -3616,7 +3670,7 @@ function TasksView({
               <h3>销售推进节奏</h3>
             </div>
             <div className="segmented">
-              {["日计划", "周计划", "月计划", "已完成", "全部"].map((item) => (
+              {["日计划", "周计划", "月计划", "逾期", "已完成", "全部"].map((item) => (
                 <button className={todoFilter === item ? "active" : ""} key={item} onClick={() => setTodoFilter(item)} type="button">
                   {item}
                 </button>
@@ -4446,7 +4500,7 @@ function CustomerPlanEditor({ customer, onCopyPlan, onPlanFollowup, onSave, plan
       <div className="editable-plan-grid">
         <label className="wide">下一步动作<input onChange={(event) => updatePlanDraft({ nextStep: event.target.value })} value={planDraft.nextStep} /></label>
         <label>跟进方式<select onChange={(event) => updatePlanDraft({ method: event.target.value })} value={planDraft.method}>{METHODS.map((method) => <option key={method}>{method}</option>)}</select></label>
-        <label>计划日期<input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} /></label>
+        <label>{planDateLabel(planDraft.planType)}<input onChange={(event) => updatePlanDraft({ dueDate: event.target.value })} type="date" value={planDraft.dueDate} /></label>
         <label>优先级<select onChange={(event) => updatePlanDraft({ priority: event.target.value })} value={planDraft.priority}>{TASK_PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}</select></label>
         <label>状态<select onChange={(event) => updatePlanDraft({ status: event.target.value })} value={planDraft.status}>{PLAN_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label>
       </div>
@@ -4815,6 +4869,12 @@ function priorityRank(priority) {
 
 function planTypeRank(type) {
   return { 日计划: 0, 周计划: 1, 月计划: 2 }[type] ?? 3;
+}
+
+function planDateLabel(type) {
+  if (type === "周计划") return "本周截止日";
+  if (type === "月计划") return "本月截止日";
+  return "执行日期";
 }
 
 function statusClass(status) {
